@@ -4,7 +4,7 @@
   import { body } from '$styled-system/recipes';
   import { layout } from '$design/system';
   import FrameBorder from '$lib/components/FrameBorder.svelte';
-  import { lensElement, lensHome, lensDetached } from '$lib/motion/lensTimeline';
+  import { lensElement, lensHome, lensDetached, lensAttachment } from '$lib/motion/lensTimeline';
   import { metadataNode, metadataDetached, metadataHome } from '$lib/motion/metadata';
   import {
     SCROLL_ORCHESTRATOR_CONTEXT_KEY,
@@ -12,6 +12,7 @@
   } from '$lib/motion';
   import { createPortalContext } from '$lib/motion/portalStore';
   import { initLogosTimelines } from './LogosSection.motion';
+  import { createPortalTimeline } from './FilmEntryPortal';
   import { getVideoSources } from '$lib/utils/video';
 
   const logos = [
@@ -40,9 +41,11 @@
   const portalVideoSources = getVideoSources(portalVideoSrc);
 
   let destroy: (() => void) | undefined;
+  let portalTimelineCleanup: (() => void) | undefined;
   let mounted = false;
   let metadataDetachedState = false;
   let lensReady = false;
+  let lensOwner: string | null = null;
   let lensNode: HTMLElement | null = null;
   let lensHomeNode: HTMLElement | null = null;
   let metadataHomeNode: HTMLElement | null = null;
@@ -101,11 +104,38 @@
 
   function attachLens() {
     if (!lensNode) return;
-    if (lensReady && lensHost && lensNode.parentElement !== lensHost) {
+    if (lensReady && lensHost && lensOwner === 'logos' && lensNode.parentElement !== lensHost) {
       lensHost.appendChild(lensNode);
     } else if (!lensReady && lensHomeNode && lensNode.parentElement !== lensHomeNode) {
       lensHomeNode.appendChild(lensNode);
     }
+  }
+
+  function initPortalTimeline() {
+    if (
+      !mounted ||
+      !metadataDetachedState ||
+      portalTimelineCleanup ||
+      !root ||
+      !rail ||
+      !netflixLogo ||
+      !portal ||
+      !portalLogoClone ||
+      !portalVideo
+    ) {
+      return;
+    }
+
+    portalTimelineCleanup = createPortalTimeline({
+      root,
+      rail,
+      logoEl: netflixLogo,
+      portalContext,
+      portalLogoClone,
+      portalVideo,
+      orchestrator,
+      onComplete: () => dispatch('portal:film-ready', { progress: 1 })
+    });
   }
 
   function initIfReady() {
@@ -113,15 +143,10 @@
     destroy = initLogosTimelines({
       root,
       rail,
-      netflixLogo,
-      portal,
       metadata: metadataStrip,
-      portalLogo: portalLogoClone,
-      portalVideo,
-      onPortalReady: () => dispatch('portal:film-ready', { progress: 1 }),
-      orchestrator,
-      portalContext
+      orchestrator
     });
+    initPortalTimeline();
   }
 
   const metadataUnsub = metadataNode.subscribe((node) => {
@@ -136,10 +161,14 @@
 
   const detachedUnsub = metadataDetached.subscribe((value) => {
     metadataDetachedState = value;
-    if (!metadataDetachedState && destroy) {
-      destroy();
+    if (!metadataDetachedState) {
+      destroy?.();
       destroy = undefined;
+      portalTimelineCleanup?.();
+      portalTimelineCleanup = undefined;
       portalContext.reset();
+    } else {
+      initPortalTimeline();
     }
     attachMetadata();
     attachLens();
@@ -168,6 +197,11 @@
     attachLens();
   });
 
+  const lensAttachmentUnsub = lensAttachment.subscribe((owner) => {
+    lensOwner = owner;
+    attachLens();
+  });
+
   onMount(() => {
     mounted = true;
     attachMetadata();
@@ -178,12 +212,14 @@
 
   onDestroy(() => {
     destroy?.();
+    portalTimelineCleanup?.();
     metadataUnsub();
     detachedUnsub();
     metadataHomeUnsub();
     lensElementUnsub();
     lensHomeUnsub();
     lensDetachedUnsub();
+    lensAttachmentUnsub();
     portalContext.reset();
     portalContext.attachElement(null);
   });

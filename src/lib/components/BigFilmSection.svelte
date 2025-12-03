@@ -5,9 +5,9 @@
   import { layout } from '$design/system';
   import { gsap, brandEase, SCROLL_ORCHESTRATOR_CONTEXT_KEY, type ScrollOrchestrator } from '$lib/motion';
   import SectionLabel from './SectionLabel.svelte';
-  import LensBug from './LensBug.svelte';
   import { createEventDispatcher } from 'svelte';
   import { getVideoSources } from '$lib/utils/video';
+  import { lensElement, lensAttachment, attachLensToSection } from '$lib/motion/lensTimeline';
 
   export let filmPortalReady = false;
 
@@ -26,7 +26,9 @@
     title: string;
     body: string;
     src: string;
+    kind: 'video' | 'image';
     ref: HTMLElement | null;
+    videoRef?: HTMLVideoElement | null;
   };
 
   const films: FilmCard[] = [
@@ -35,23 +37,80 @@
       title: 'Netflix — 14 Peaks: Nothing Is Impossible',
       body: "Lead cinematographer documenting Nimsdai's historic push across the world's fourteen highest peaks.",
       src: '/videos/wix-video.mp4',
-      ref: null
+      kind: 'video',
+      ref: null,
+      videoRef: null
     },
     {
       id: 'k2winter',
       title: 'K2 Winter Expedition',
       body: 'Director of Photography on the first successful K2 winter expedition—operating above 8,000 metres.',
       src: '/videos/documentary-sierra.mp4',
-      ref: null
+      kind: 'video',
+      ref: null,
+      videoRef: null
     },
     {
       id: 'k2summit',
       title: 'K2 Summit 2022',
       body: 'Frozen light on the final ridge, captured moments before the summit push.',
       src: '/pictures/EVEREST CLEAN (1 of 2).jpg',
+      kind: 'image',
       ref: null
     }
   ];
+
+  let lensHost: HTMLDivElement | null = null;
+  let lensNode: HTMLElement | null = null;
+  let lensOwner: string | null = null;
+
+  const lensElementUnsub = lensElement.subscribe((node) => {
+    lensNode = node;
+    syncLensNode();
+  });
+
+  const lensAttachmentUnsub = lensAttachment.subscribe((owner) => {
+    lensOwner = owner;
+    syncLensNode();
+  });
+
+  function syncLensNode() {
+    if (lensOwner === 'film' && lensHost && lensNode && lensNode.parentElement !== lensHost) {
+      lensHost.appendChild(lensNode);
+    }
+  }
+
+  let portalSynced = false;
+
+  function safePlay(video?: HTMLVideoElement | null) {
+    if (!video) return;
+    const result = video.play();
+    if (result && typeof result.catch === 'function') {
+      result.catch(() => {});
+    }
+  }
+
+  function resetSequence() {
+    activeIndex = 0;
+    films.forEach((film, idx) => {
+      if (film.kind === 'video' && film.videoRef) {
+        try {
+          film.videoRef.currentTime = 0;
+        } catch (error) {
+          /* no-op: media element may not be seekable yet */
+        }
+        film.videoRef.pause();
+        if (idx === 0) {
+          safePlay(film.videoRef);
+        }
+      }
+    });
+  }
+
+  $: if (filmPortalReady && !portalSynced) {
+    portalSynced = true;
+    resetSequence();
+  }
 
   const sectionClass = css({
     position: 'relative',
@@ -85,7 +144,17 @@
     position: 'absolute',
     top: '-24px',
     right: { base: '0', md: '2rem' },
-    zIndex: 2
+    width: '72px',
+    height: '72px',
+    zIndex: 2,
+    pointerEvents: 'none',
+    display: 'flex',
+    alignItems: 'flex-start',
+    justifyContent: 'flex-end',
+    '& > *': {
+      transform: 'scale(0.75)',
+      transformOrigin: 'top right'
+    }
   });
 
   const indicatorWrap = css({
@@ -129,7 +198,11 @@
         start: 'top top',
         end: '+=300%',
         scrub: true,
-        pin: true
+        pin: true,
+        onEnter: () => attachLensToSection('film'),
+        onEnterBack: () => attachLensToSection('film'),
+        onLeave: () => attachLensToSection(null),
+        onLeaveBack: () => attachLensToSection('logos')
       },
       defaults: { ease: brandEase }
     });
@@ -193,6 +266,9 @@
     timeline?.kill();
     timelineDisposer?.();
     timelineDisposer = null;
+    attachLensToSection(null);
+    lensElementUnsub();
+    lensAttachmentUnsub();
   });
 </script>
 
@@ -200,9 +276,7 @@
   <SectionLabel prefix="Film" title="High Altitude Features" />
 
   <div class={cardsClass}>
-    <div class={lensBugWrap}>
-      <LensBug size={42} label="HUD" />
-    </div>
+    <div class={lensBugWrap} bind:this={lensHost}></div>
 
     {#each films as film}
       <article
@@ -210,10 +284,10 @@
         bind:this={film.ref}
       >
         <div class={mediaFrame}>
-          {#if film.src.endsWith('.jpg') || film.src.endsWith('.avif')}
+          {#if film.kind === 'image'}
             <img class={mediaClass} src={film.src} alt={film.title} loading="lazy" />
           {:else}
-            <video class={mediaClass} autoplay muted loop playsinline>
+            <video class={mediaClass} autoplay muted loop playsinline bind:this={film.videoRef}>
               {#each getVideoSources(film.src) as source}
                 <source src={source.src} type={source.type} />
               {/each}
