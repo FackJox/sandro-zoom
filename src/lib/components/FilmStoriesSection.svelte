@@ -44,11 +44,92 @@
   });
   const videoClass = css({ width: '100%', height: '100%', objectFit: 'cover' });
   const titleClass = cx(heading({ size: 'sm' }), css({ color: 'text' }));
+  const portalClass = css({
+    position: 'fixed',
+    width: '48px',
+    height: '48px',
+    borderRadius: '999px',
+    borderWidth: '1px',
+    borderColor: 'accent',
+    pointerEvents: 'none',
+    opacity: 0,
+    zIndex: 15,
+    transform: 'translate(-50%, -50%)',
+    mixBlendMode: 'screen',
+    background: 'rgba(15, 23, 26, 0.55)'
+  });
 
   const orchestrator =
     getContext<ScrollOrchestrator | undefined>(SCROLL_ORCHESTRATOR_CONTEXT_KEY);
   let timeline: gsap.core.Timeline | null = null;
   let timelineDisposer: (() => void) | null = null;
+  let portalMask: HTMLDivElement | null = null;
+  let portalTimeline: gsap.core.Timeline | null = null;
+
+  export function receivePortalIntro(detail?: { focusRect?: DOMRect }) {
+    if (!portalMask) return;
+    portalTimeline?.kill();
+    const fallbackRect = new DOMRect(
+      window.innerWidth / 2,
+      window.innerHeight * 0.6,
+      40,
+      40
+    );
+    const startRect = detail?.focusRect ?? stories[0]?.ref?.getBoundingClientRect() ?? fallbackRect;
+    const targetRect = stories[0]?.ref?.getBoundingClientRect() ?? startRect;
+    const start = {
+      x: startRect.left + startRect.width / 2,
+      y: startRect.top + startRect.height / 2
+    };
+    const target = {
+      x: targetRect.left + targetRect.width / 2,
+      y: targetRect.top + targetRect.height / 2
+    };
+
+    portalTimeline = gsap.timeline({ defaults: { ease: brandEase } });
+    portalTimeline
+      .set(portalMask, {
+        opacity: 1,
+        width: 48,
+        height: 48,
+        left: start.x,
+        top: start.y
+      })
+      .to(portalMask, { left: target.x, top: target.y, duration: 0.45 })
+      .to(
+        stories[0]?.ref,
+        {
+          scale: 1.02,
+          duration: 0.4
+        },
+        '<'
+      )
+      .to(
+        portalMask,
+        {
+          width: targetRect.width * 1.5,
+          height: targetRect.width * 1.5,
+          duration: 0.25
+        },
+        '>-0.2'
+      )
+      .to(
+        portalMask,
+        {
+          width: '140vw',
+          height: '140vw',
+          duration: 0.55
+        },
+        '>-0.1'
+      )
+      .to(portalMask, { opacity: 0, duration: 0.25 }, '>-0.15');
+
+    portalTimeline.eventCallback('onComplete', () => {
+      if (portalMask) {
+        portalMask.style.opacity = '0';
+      }
+    });
+  }
 
   onMount(async () => {
     await tick();
@@ -98,6 +179,8 @@
     timeline = null;
     timelineDisposer?.();
     timelineDisposer = null;
+    portalTimeline?.kill();
+    portalTimeline = null;
   });
 </script>
 
@@ -117,4 +200,5 @@
       </article>
     {/each}
   </div>
+  <div class={portalClass} bind:this={portalMask} aria-hidden="true"></div>
 </section>

@@ -1,66 +1,40 @@
 <script lang="ts">
-  import { getContext, onMount, onDestroy, tick } from 'svelte';
+  import { getContext, onDestroy, onMount, tick } from 'svelte';
   import { css, cx } from '$styled-system/css';
-  import { body, heading } from '$styled-system/recipes';
+  import { heading, body } from '$styled-system/recipes';
+  import SectionLabel from '$lib/components/SectionLabel.svelte';
+  import StepIndicator from '$lib/components/StepIndicator.svelte';
   import { layout } from '$design/system';
-  import { gsap, brandEase, SCROLL_ORCHESTRATOR_CONTEXT_KEY, type ScrollOrchestrator } from '$lib/motion';
-  import SectionLabel from './SectionLabel.svelte';
-  import { createEventDispatcher } from 'svelte';
+  import { filmCards } from '$lib/data/film-cards';
   import { getVideoSources } from '$lib/utils/video';
-  import { lensElement, lensAttachment, attachLensToSection } from '$lib/motion/lensTimeline';
+  import { initBigFilmMotion } from '$lib/sections/BigFilmSection.motion';
+  import { lensElement, lensAttachment } from '$lib/motion/lensTimeline';
+  import {
+    SCROLL_ORCHESTRATOR_CONTEXT_KEY,
+    type ScrollOrchestrator
+  } from '$lib/motion';
+  import { createEventDispatcher } from 'svelte';
 
   export let filmPortalReady = false;
 
-  let root: HTMLElement;
-  let mounted = false;
-  let timeline: gsap.core.Timeline | null = null;
-  let timelineDisposer: (() => void) | null = null;
-
-  const dispatch = createEventDispatcher<{ 'film:exit': void }>();
-  let activeIndex = 0;
   const orchestrator =
     getContext<ScrollOrchestrator | undefined>(SCROLL_ORCHESTRATOR_CONTEXT_KEY);
+  type FilmExitDetail = { focusRect: DOMRect };
+  const dispatch = createEventDispatcher<{ 'film:exit': FilmExitDetail }>();
 
-  type FilmCard = {
-    id: string;
-    title: string;
-    body: string;
-    src: string;
-    kind: 'video' | 'image';
-    ref: HTMLElement | null;
-    videoRef?: HTMLVideoElement | null;
-  };
+  let root: HTMLElement;
+  let viewport: HTMLElement;
+  let slab: HTMLElement;
+  let hudHost: HTMLElement;
+  let mounted = false;
+  let initializingMotion = false;
+  let motionCleanup: (() => void) | null = null;
 
-  const films: FilmCard[] = [
-    {
-      id: 'netflix',
-      title: 'Netflix — 14 Peaks: Nothing Is Impossible',
-      body: "Lead cinematographer documenting Nimsdai's historic push across the world's fourteen highest peaks.",
-      src: '/videos/wix-video.mp4',
-      kind: 'video',
-      ref: null,
-      videoRef: null
-    },
-    {
-      id: 'k2winter',
-      title: 'K2 Winter Expedition',
-      body: 'Director of Photography on the first successful K2 winter expedition—operating above 8,000 metres.',
-      src: '/videos/documentary-sierra.mp4',
-      kind: 'video',
-      ref: null,
-      videoRef: null
-    },
-    {
-      id: 'k2summit',
-      title: 'K2 Summit 2022',
-      body: 'Frozen light on the final ridge, captured moments before the summit push.',
-      src: '/pictures/EVEREST CLEAN (1 of 2).jpg',
-      kind: 'image',
-      ref: null
-    }
-  ];
+  let activeIndex = 0;
+  let lastPortalDetail: FilmExitDetail | null = null;
+  let mediaNodes: HTMLElement[] = [];
+  let videoNodes: Array<HTMLVideoElement | null> = [];
 
-  let lensHost: HTMLDivElement | null = null;
   let lensNode: HTMLElement | null = null;
   let lensOwner: string | null = null;
 
@@ -75,237 +49,274 @@
   });
 
   function syncLensNode() {
-    if (lensOwner === 'film' && lensHost && lensNode && lensNode.parentElement !== lensHost) {
-      lensHost.appendChild(lensNode);
+    if (lensOwner === 'film' && hudHost && lensNode && lensNode.parentElement !== hudHost) {
+      hudHost.appendChild(lensNode);
     }
   }
 
-  let portalSynced = false;
+  function collectMediaNodes() {
+    if (!viewport) return;
+    const nodes = Array.from(
+      viewport.querySelectorAll<HTMLElement>('[data-card]')
+    ).sort((a, b) => Number(a.dataset.card ?? 0) - Number(b.dataset.card ?? 0));
+    mediaNodes = nodes;
+    videoNodes = nodes.map((node) => (node instanceof HTMLVideoElement ? node : null));
+  }
 
   function safePlay(video?: HTMLVideoElement | null) {
     if (!video) return;
-    const result = video.play();
-    if (result && typeof result.catch === 'function') {
-      result.catch(() => {});
+    const playback = video.play();
+    if (playback && typeof playback.catch === 'function') {
+      playback.catch(() => {});
     }
   }
 
-  function resetSequence() {
-    activeIndex = 0;
-    films.forEach((film, idx) => {
-      if (film.kind === 'video' && film.videoRef) {
-        try {
-          film.videoRef.currentTime = 0;
-        } catch (error) {
-          /* no-op: media element may not be seekable yet */
-        }
-        film.videoRef.pause();
-        if (idx === 0) {
-          safePlay(film.videoRef);
-        }
+  function resetVideos(targetIndex = 0) {
+    activeIndex = targetIndex;
+    videoNodes.forEach((video, idx) => {
+      if (!video) return;
+      try {
+        video.currentTime = 0;
+      } catch {
+        /* media might not be seekable yet */
+      }
+      if (idx === targetIndex) {
+        safePlay(video);
+      } else {
+        video.pause();
       }
     });
   }
 
-  $: if (filmPortalReady && !portalSynced) {
-    portalSynced = true;
-    resetSequence();
+  function handleStepChange(index: number) {
+    activeIndex = index;
+    videoNodes.forEach((video, idx) => {
+      if (!video) return;
+      if (idx === index) {
+        safePlay(video);
+      } else {
+        video.pause();
+      }
+    });
   }
 
-  const sectionClass = css({
-    position: 'relative',
-    minHeight: '100vh',
-    bg: 'bg',
-    color: 'text',
-    px: { base: layout.safeX.base, md: layout.safeX.md, lg: layout.safeX.lg },
-    py: { base: '4rem', md: '5rem' }
-  });
-  const cardsClass = css({ position: 'relative', mt: '2rem', minHeight: '60vh' });
-  const cardShell = css({
-    position: 'absolute',
-    inset: 0,
-    opacity: 0,
-    clipPath: 'circle(0% at 50% 50%)',
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '1rem'
-  });
-  const mediaFrame = css({
-    flex: 1,
-    overflow: 'hidden',
-    borderWidth: '1px',
-    borderColor: 'accent'
-  });
-  const mediaClass = css({ width: '100%', height: '100%', objectFit: 'cover', display: 'block' });
-  const headingClass = cx(heading({ size: 'sm' }), css({ color: 'text' }));
-  const bodyClass = body({ tone: 'standard' });
+  function handlePortalReady(detail: FilmExitDetail) {
+    lastPortalDetail = detail;
+    dispatch('film:exit', detail);
+  }
 
-  const lensBugWrap = css({
-    position: 'absolute',
-    top: '-24px',
-    right: { base: '0', md: '2rem' },
-    width: '72px',
-    height: '72px',
-    zIndex: 2,
-    pointerEvents: 'none',
-    display: 'flex',
-    alignItems: 'flex-start',
-    justifyContent: 'flex-end',
-    '& > *': {
-      transform: 'scale(0.75)',
-      transformOrigin: 'top right'
-    }
-  });
-
-  const indicatorWrap = css({
-    mt: '2rem',
-    display: 'flex',
-    alignItems: 'center',
-    gap: '0.5rem',
-    fontFamily: 'plex',
-    letterSpacing: '0.12em',
-    textTransform: 'uppercase'
-  });
-
-  const indicatorDot = css({
-    width: '10px',
-    height: '10px',
-    borderRadius: '999px',
-    borderWidth: '1px',
-    borderColor: 'accent',
-    backgroundColor: 'transparent',
-    transition: 'background-color 0.2s ease, transform 0.2s ease'
-  });
-
-  const indicatorDotActive = css({
-    backgroundColor: 'accent',
-    transform: 'scale(1.1)'
-  });
-
-  async function buildTimeline() {
-    if (timeline) {
-      timeline.kill();
-      timeline = null;
-      timelineDisposer?.();
-      timelineDisposer = null;
-    }
-
+  async function bootstrapMotion() {
+    if (initializingMotion || motionCleanup || !filmPortalReady) return;
+    initializingMotion = true;
     await tick();
-
-    const tl = gsap.timeline({
-      scrollTrigger: {
-        trigger: root,
-        start: 'top top',
-        end: '+=300%',
-        scrub: true,
-        pin: true,
-        onEnter: () => attachLensToSection('film'),
-        onEnterBack: () => attachLensToSection('film'),
-        onLeave: () => attachLensToSection(null),
-        onLeaveBack: () => attachLensToSection('logos')
-      },
-      defaults: { ease: brandEase }
-    });
-
-    films.forEach((_, index) => {
-      const card = films[index]?.ref;
-      const nextCard = films[index + 1]?.ref;
-
-      if (tl && index === 0 && card) {
-        tl
-          .fromTo(card, { autoAlpha: 0 }, { autoAlpha: 1, duration: 0.3 }, 0)
-          .call(() => {
-            activeIndex = 0;
-          }, undefined, 0.05);
-      }
-
-      if (tl && card && nextCard) {
-        const start = (index + 0.95) / films.length;
-        tl
-          .to(
-            card,
-            {
-              clipPath: 'circle(0% at 50% 50%)',
-              duration: 0.3
-            },
-            start
-          )
-          .fromTo(
-            nextCard,
-            { clipPath: 'circle(0% at 50% 50%)', autoAlpha: 0 },
-            { clipPath: 'circle(150% at 50% 50%)', autoAlpha: 1, duration: 0.3 },
-            start + 0.05
-          )
-          .call(() => {
-            activeIndex = index + 1;
-          }, undefined, start + 0.1);
-      }
-    });
-
-    tl.call(() => {
-      dispatch('film:exit');
-    }, undefined, '+=0.2');
-    timeline = tl;
-    if (orchestrator) {
-      timelineDisposer = orchestrator.registerSectionTimeline('big-film', () => tl);
+    collectMediaNodes();
+    if (!mediaNodes.length || !root || !viewport || !slab) {
+      initializingMotion = false;
+      return;
     }
+    resetVideos(0);
+    lastPortalDetail = null;
+    motionCleanup = initBigFilmMotion({
+      root,
+      viewport,
+      slab,
+      mediaNodes,
+      orchestrator,
+      onStepChange: handleStepChange,
+      onComplete: () => {
+        if (lastPortalDetail) {
+          dispatch('film:exit', lastPortalDetail);
+        }
+      },
+      onPortalReady: handlePortalReady
+    });
+    initializingMotion = false;
   }
 
   onMount(() => {
     mounted = true;
     if (filmPortalReady) {
-      buildTimeline();
+      bootstrapMotion();
     }
   });
 
-  $: if (mounted && filmPortalReady && !timeline) {
-    buildTimeline();
+  $: if (mounted && filmPortalReady && !motionCleanup) {
+    bootstrapMotion();
   }
 
   onDestroy(() => {
-    timeline?.kill();
-    timelineDisposer?.();
-    timelineDisposer = null;
-    attachLensToSection(null);
+    motionCleanup?.();
+    motionCleanup = null;
     lensElementUnsub();
     lensAttachmentUnsub();
   });
+
+  const steps = filmCards.map((card) => card.stepLabel);
+  let currentCard = filmCards[0];
+  $: currentCard = filmCards[activeIndex] ?? filmCards[0];
+
+  const sectionClass = css({
+    position: 'relative',
+    minHeight: '100vh',
+    px: { base: layout.safeX.base, md: layout.safeX.md, lg: layout.safeX.lg },
+    py: { base: '4rem', md: '5rem', lg: '6rem' },
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '2.5rem',
+    color: 'text'
+  });
+
+  const grid = css({
+    display: 'grid',
+    gap: { base: '2rem', md: '2.5rem', lg: '3rem' },
+    alignItems: 'start',
+    gridTemplateColumns: { base: '1fr', lg: '1.15fr 0.85fr' }
+  });
+
+  const viewportClass = css({
+    position: 'relative',
+    width: '100%',
+    aspectRatio: '2.39 / 1',
+    borderWidth: '1px',
+    borderColor: 'accent',
+    borderRadius: '12px',
+    overflow: 'hidden',
+    backgroundColor: 'blackPearl',
+    isolation: 'isolate'
+  });
+
+  const mediaLayer = css({
+    position: 'absolute',
+    inset: 0,
+    width: '100%',
+    height: '100%',
+    objectFit: 'cover',
+    display: 'block'
+  });
+
+  const hudClass = css({
+    position: 'absolute',
+    top: '1rem',
+    right: '1rem',
+    width: '56px',
+    height: '56px',
+    pointerEvents: 'none'
+  });
+
+  const slabWrap = css({
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '1.5rem'
+  });
+
+  const slabClass = css({
+    backgroundColor: 'accent',
+    color: 'blackStallion',
+    padding: { base: '1.5rem', md: '2rem' },
+    borderRadius: '12px',
+    borderWidth: '1px',
+    borderColor: 'blackPearl',
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '1rem',
+    minHeight: '320px'
+  });
+
+  const slabEyebrow = css({
+    fontFamily: 'trade',
+    textTransform: 'uppercase',
+    letterSpacing: '0.18em',
+    fontSize: '0.75rem'
+  });
+
+  const slabTitle = cx(
+    heading({ size: 'md' }),
+    css({
+      color: 'blackStallion',
+      fontSize: { base: '1.45rem', md: '1.85rem' },
+      letterSpacing: '0.08em'
+    })
+  );
+
+  const slabBody = cx(
+    body({ tone: 'standard' }),
+    css({
+      color: 'blackStallion',
+      fontSize: '1rem'
+    })
+  );
+
+  const metaList = css({
+    display: 'flex',
+    flexWrap: 'wrap',
+    gap: '0.75rem',
+    fontFamily: 'plex',
+    fontSize: '0.75rem',
+    textTransform: 'uppercase',
+    letterSpacing: '0.2em'
+  });
+
+  const indicatorWrap = css({
+    display: 'flex',
+    justifyContent: 'flex-start'
+  });
+
+  const mediaSources = filmCards.map((card) =>
+    card.media.type === 'video' ? getVideoSources(card.media.src) : []
+  );
 </script>
 
 <section bind:this={root} class={sectionClass} id="film">
   <SectionLabel prefix="Film" title="High Altitude Features" />
 
-  <div class={cardsClass}>
-    <div class={lensBugWrap} bind:this={lensHost}></div>
+  <div class={grid}>
+    <div class={viewportClass} bind:this={viewport}>
+      {#each filmCards as card, index}
+        {#if card.media.type === 'video'}
+          <video
+            class={mediaLayer}
+            autoplay
+            muted
+            playsinline
+            loop
+            data-card={index}
+          >
+            {#each mediaSources[index] as source}
+              <source src={source.src} type={source.type} />
+            {/each}
+          </video>
+        {:else}
+          <img
+            class={mediaLayer}
+            src={card.media.src}
+            alt={card.media.alt}
+            loading="lazy"
+            data-card={index}
+          />
+        {/if}
+      {/each}
 
-    {#each films as film}
-      <article
-        class={cardShell}
-        bind:this={film.ref}
-      >
-        <div class={mediaFrame}>
-          {#if film.kind === 'image'}
-            <img class={mediaClass} src={film.src} alt={film.title} loading="lazy" />
-          {:else}
-            <video class={mediaClass} autoplay muted loop playsinline bind:this={film.videoRef}>
-              {#each getVideoSources(film.src) as source}
-                <source src={source.src} type={source.type} />
-              {/each}
-            </video>
-          {/if}
-        </div>
-        <h2 class={headingClass}>{film.title}</h2>
-        <p class={bodyClass}>{film.body}</p>
+      <div class={hudClass} bind:this={hudHost}></div>
+    </div>
+
+    <div class={slabWrap}>
+      <article class={slabClass} bind:this={slab}>
+        <p class={slabEyebrow}>High altitude features</p>
+        <h3 class={slabTitle}>{currentCard.title}</h3>
+        <p class={slabBody}>{currentCard.description}</p>
+
+        {#if currentCard.metadata}
+          <p class={metaList}>
+            {#each currentCard.metadata as meta}
+              <span>{meta}</span>
+            {/each}
+          </p>
+        {/if}
       </article>
-    {/each}
-  </div>
 
-  <div class={indicatorWrap} aria-label="Film story progress">
-    {#each films as film, idx}
-      <span
-        class={cx(indicatorDot, idx === activeIndex && indicatorDotActive)}
-        aria-label={`Step ${idx + 1}: ${film.title}`}
-      ></span>
-    {/each}
+      <div class={indicatorWrap}>
+        <StepIndicator steps={steps} activeIndex={activeIndex} />
+      </div>
+    </div>
   </div>
 </section>

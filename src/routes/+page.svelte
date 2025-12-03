@@ -12,9 +12,15 @@
   import { framework2Enabled } from '$lib/stores/features';
 
   let filmPortalReady = false;
+  type FilmStoriesInstance = InstanceType<typeof FilmStoriesSection>;
+  let filmStoriesRef: FilmStoriesInstance | null = null;
 
   function handleFilmPortal() {
     filmPortalReady = true;
+  }
+
+  function handleFilmExit(event: CustomEvent<{ focusRect: DOMRect }>) {
+    filmStoriesRef?.receivePortalIntro(event.detail);
   }
 
   const gateMessage = css({
@@ -32,8 +38,8 @@
   <LogosSection on:portal:film-ready={handleFilmPortal} />
 
   {#if $framework2Enabled}
-    <BigFilmSection filmPortalReady={filmPortalReady} />
-    <FilmStoriesSection />
+    <BigFilmSection filmPortalReady={filmPortalReady} on:film:exit={handleFilmExit} />
+    <FilmStoriesSection bind:this={filmStoriesRef} />
     <PhotoStatsSection />
     <AboutSection />
     <ServicesSection />

@@ -27,6 +27,11 @@ Useful scripts:
 
 Read that file before adjusting motion code so new sections stay aligned with the orchestration layer.
 
+## Portal Event Flow
+
+- Logos → Film: the Netflix logo registers with `createPortalContext('logos')`; when the logo band completes its ScrollTrigger, the circular mask expands, crossfades into the FILM viewport, and `BigFilmSection` boots its pinned scrollytelling sequence.
+- Film → Film Stories: as the final FILM card concludes, the exit portal helper collapses the cards into a strip, dispatches `film:exit` with the focus rect, and `FilmStoriesSection.receivePortalIntro()` drives the follow-on circular zoom that lands on Sasha / No Days Off before its own ScrollTrigger timeline takes over.
+
 ## Feature Flags
 
 Framework 2+ sections are disabled by default to keep experimentation isolated. Append `?framework2=1` to the URL (or set the `framework2Enabled` store) to render the additional scenes.
