@@ -34,10 +34,43 @@ type ScrollSmootherModuleShape = {
 let scrollSmootherCtorPromise: Promise<ScrollSmootherConstructor | null> | null =
   null;
 
+let performanceLoggerInstalled = false;
+
 function buildContext(): SectionTimelineContext {
   // Always register GSAP plugins before building timelines.
   registerGsap();
   return { gsap };
+}
+
+function ensurePerformanceLogger() {
+  if (performanceLoggerInstalled || typeof window === 'undefined') {
+    return;
+  }
+  performanceLoggerInstalled = true;
+  let frameCount = 0;
+  let lastSample = performance.now();
+  gsap.ticker.add(() => {
+    frameCount += 1;
+    const now = performance.now();
+    if (now - lastSample >= 2000) {
+      const fps = Math.round((frameCount * 1000) / (now - lastSample));
+      const triggers = ScrollTrigger.getAll();
+      const pinned = triggers.filter((trigger) => Boolean(trigger.pin)).length;
+      console.debug(
+        '[motion][perf]',
+        'fps',
+        fps,
+        'animations',
+        timelineRegistry.size,
+        'scrollTriggers',
+        triggers.length,
+        'pinned',
+        pinned
+      );
+      frameCount = 0;
+      lastSample = now;
+    }
+  });
 }
 
 export function registerSectionTimeline(
@@ -46,6 +79,18 @@ export function registerSectionTimeline(
 ): () => void {
   const context = buildContext();
   const animation = build(context);
+  ensurePerformanceLogger();
+  const duration =
+    typeof animation.duration === 'function' ? animation.duration() : 'n/a';
+  console.debug(
+    '[motion] register animation',
+    'name',
+    name,
+    'type',
+    animation.constructor?.name ?? 'unknown',
+    'duration',
+    duration
+  );
   const dispose = () => {
     cleanupSectionTimeline(name);
   };

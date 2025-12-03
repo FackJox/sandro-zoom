@@ -1,10 +1,11 @@
 <script lang="ts">
-  import { getContext, onDestroy, onMount } from 'svelte';
+  import { getContext, onDestroy, onMount, tick } from 'svelte';
   import { css, cx } from '$styled-system/css';
   import { heading, body } from '$styled-system/recipes';
   import { layout } from '$design/system';
   import { gsap, SCROLL_ORCHESTRATOR_CONTEXT_KEY, type ScrollOrchestrator } from '$lib/motion';
   import SectionLabel from './SectionLabel.svelte';
+  import { getVideoSources } from '$lib/utils/video';
 
   let root: HTMLElement;
   let successBlock: HTMLElement;
@@ -64,8 +65,9 @@
 
   const orchestrator =
     getContext<ScrollOrchestrator | undefined>(SCROLL_ORCHESTRATOR_CONTEXT_KEY);
-  let timeline: gsap.core.Timeline | null = null;
-  let timelineDisposer: (() => void) | null = null;
+let timeline: gsap.core.Timeline | null = null;
+let timelineDisposer: (() => void) | null = null;
+let disposed = false;
 
   function cleanupTimeline() {
     timeline?.kill();
@@ -76,39 +78,52 @@
 
   onMount(() => {
     cleanupTimeline();
-    const tl = gsap.timeline({
-      scrollTrigger: {
-        trigger: root,
-        start: 'top top',
-        end: '+=150%',
-        scrub: true,
-        pin: true,
-        onUpdate(self) {
-          const p = self.progress;
-          const threshold = 0.5;
-          const t = gsap.utils.clamp(0, 1, (p - threshold + 0.2) / 0.4);
-          gsap.set(successBlock, { opacity: 1 - t });
-          gsap.set(failBlock, { opacity: t });
-        }
+    (async () => {
+      await tick();
+      if (disposed) return;
+      if (!root || !successBlock || !failBlock) {
+        console.warn('[photo-stats] missing refs, skipping motion init');
+        return;
       }
-    });
 
-    // Timeline only exists for ScrollTrigger coordination; add a dummy tween.
-    tl.to({}, { duration: 1 });
+      const tl = gsap.timeline({
+        scrollTrigger: {
+          trigger: root,
+          start: 'top top',
+          end: '+=150%',
+          scrub: true,
+          pin: true,
+          onUpdate(self) {
+            const p = self.progress;
+            const threshold = 0.5;
+            const t = gsap.utils.clamp(0, 1, (p - threshold + 0.2) / 0.4);
+            gsap.set(successBlock, { opacity: 1 - t });
+            gsap.set(failBlock, { opacity: t });
+          }
+        }
+      });
 
-    timeline = tl;
-    if (orchestrator) {
-      timelineDisposer = orchestrator.registerSectionTimeline('photo-stats', () => tl);
-    }
+      tl.to({}, { duration: 1 });
+
+      timeline = tl;
+      if (orchestrator) {
+        timelineDisposer = orchestrator.registerSectionTimeline('photo-stats', () => tl);
+      }
+    })();
   });
 
   onDestroy(() => {
+    disposed = true;
     cleanupTimeline();
   });
 </script>
 
 <section bind:this={root} class={sectionClass} id="photo-stats">
-  <video class={bgClass} src="/videos/documentary-sierra.mp4" autoplay muted loop playsinline></video>
+  <video class={bgClass} autoplay muted loop playsinline>
+    {#each getVideoSources('/videos/documentary-sierra.mp4') as source}
+      <source src={source.src} type={source.type} />
+    {/each}
+  </video>
 
   <div class={overlayClass}></div>
 

@@ -38,6 +38,17 @@ export function initLogosTimelines(options: LogosTimelineOptions) {
     Boolean(options.orchestrator)
   );
 
+  const missingTargets: string[] = [];
+  if (!options.root) missingTargets.push('root');
+  if (!options.rail) missingTargets.push('rail');
+  if (!options.metadata) missingTargets.push('metadata');
+  if (!options.portal) missingTargets.push('portal');
+  if (!options.netflixLogo) missingTargets.push('netflixLogo');
+  if (missingTargets.length) {
+    console.warn('[logos-motion] missing targets -> skipping', missingTargets.join(', '));
+    return () => {};
+  }
+
   const logosSegment = registerLensSegment('logos', (tl, proxy, emit) => {
     tl.to(proxy, {
       xPercent: -6,

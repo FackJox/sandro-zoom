@@ -53,6 +53,16 @@ export function initHeroTimelines(options: HeroTimelineOptions) {
     'copyCount',
     options.copyLines.filter(Boolean).length
   );
+  const missingTargets: string[] = [];
+  if (!options.root) missingTargets.push('root');
+  if (!options.media) missingTargets.push('media');
+  if (!options.lens) missingTargets.push('lens');
+  if (!options.metadata) missingTargets.push('metadata');
+  if (missingTargets.length) {
+    console.warn('[hero-motion] missing targets -> skipping', missingTargets.join(', '));
+    return () => {};
+  }
+
   const heroSegment = registerLensSegment('hero', (tl, proxy, emit) => {
     tl.to(proxy, {
       xPercent: 12,

@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { getContext, onDestroy, onMount } from 'svelte';
+  import { getContext, onDestroy, onMount, tick } from 'svelte';
   import { css } from '$styled-system/css';
   import { layout } from '$design/system';
   import LensBadge from '$lib/components/LensBadge.svelte';
@@ -23,8 +23,10 @@
     type ScrollOrchestrator
   } from '$lib/motion';
   import { initHeroTimelines } from './HeroSection.motion';
+  import { getVideoSources } from '$lib/utils/video';
 
   const heroVideoSrc = '/videos/showreel.mp4';
+  const heroVideoSources = getVideoSources(heroVideoSrc);
 
   let root: HTMLElement;
   let bgVideo: HTMLVideoElement;
@@ -40,10 +42,11 @@
   let halo: HTMLDivElement;
   const strips: (HTMLVideoElement | null)[] = [];
 
-  let destroy: (() => void) | undefined;
-  let reduceMotion = false;
-  let allowHover = false;
-  let lensHover = false;
+let destroy: (() => void) | undefined;
+let reduceMotion = false;
+let allowHover = false;
+let lensHover = false;
+let disposed = false;
 
   const orchestrator =
     getContext<ScrollOrchestrator | undefined>(SCROLL_ORCHESTRATOR_CONTEXT_KEY);
@@ -56,23 +59,26 @@
   $: lensTransform = `translate3d(${lensSnapshot.xPercent}%, ${lensY}%, 0) scale(${lensSnapshot.scale * hoverScale})`;
   $: lensOpacity = lensSnapshot.opacity;
 
-  onMount(() => {
-    reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-    allowHover = window.matchMedia('(hover: hover)').matches;
+onMount(() => {
+  reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  allowHover = window.matchMedia('(hover: hover)').matches;
 
-    setLensHome(lensHome);
-    setLensElement(lensMotion);
-    markMetadataDetached(false);
-    markLensElementDetached(false);
-    attachLensToSection('hero');
-    if (metadataDock) {
-      setMetadataHome(metadataDock);
+  setLensHome(lensHome);
+  setLensElement(lensMotion);
+  markMetadataDetached(false);
+  markLensElementDetached(false);
+  attachLensToSection('hero');
+  if (metadataDock) {
+    setMetadataHome(metadataDock);
+  }
+
+  (async () => {
+    await tick();
+    if (disposed) return;
+    if (!metadata) {
+      console.warn('[hero] metadata ref missing, skipping motion init');
+      return;
     }
-
-    console.debug('[hero] onMount', {
-      hasMetadataDock: Boolean(metadataDock),
-      hasMetadata: Boolean(metadata)
-    });
     destroy = initHeroTimelines({
       root,
       media: bgVideo,
@@ -84,10 +90,12 @@
       copyLines: [titleEl, subtitleEl, bodyEl, footerEl],
       orchestrator
     });
-  });
+  })();
+});
 
-  onDestroy(() => {
-    destroy?.();
+onDestroy(() => {
+  disposed = true;
+  destroy?.();
     setMetadataElement(null);
     markMetadataDetached(false);
     setLensElement(null);
@@ -98,7 +106,6 @@
   });
 
   $: if (metadata) {
-    console.debug('[hero] metadata ref assigned', Boolean(metadata));
     setMetadataElement(metadata);
   }
 
@@ -248,15 +255,10 @@
 </script>
 
 <section class={hero} bind:this={root} id="hero">
-  <video
-    class={media}
-    bind:this={bgVideo}
-    src={heroVideoSrc}
-    autoplay
-    muted
-    playsinline
-    loop
-  >
+  <video class={media} bind:this={bgVideo} autoplay muted playsinline loop>
+    {#each heroVideoSources as source}
+      <source src={source.src} type={source.type} />
+    {/each}
     Your browser does not support the video tag.
   </video>
 
@@ -301,9 +303,12 @@
         muted
         playsinline
         loop
-        src={heroVideoSrc}
         style={`width:${cfg.size}vw;height:${cfg.size}vw;left:${cfg.left}%;top:${cfg.top}%;`}
-      ></video>
+      >
+        {#each heroVideoSources as source}
+          <source src={source.src} type={source.type} />
+        {/each}
+      </video>
     {/each}
   </div>
 </section>

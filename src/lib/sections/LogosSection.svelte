@@ -12,6 +12,7 @@
   } from '$lib/motion';
   import { createPortalContext } from '$lib/motion/portalStore';
   import { initLogosTimelines } from './LogosSection.motion';
+  import { getVideoSources } from '$lib/utils/video';
 
   const logos = [
     'Berghaus',
@@ -36,6 +37,7 @@
   let portalLogoClone: HTMLSpanElement;
   let portalVideo: HTMLVideoElement;
   const portalVideoSrc = '/videos/wix-video.mp4';
+  const portalVideoSources = getVideoSources(portalVideoSrc);
 
   let destroy: (() => void) | undefined;
   let mounted = false;
@@ -285,12 +287,15 @@
     ></span>
     <video
       bind:this={portalVideo}
-      src={portalVideoSrc}
       autoplay
       muted
       playsinline
       loop
       style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;opacity:0;"
-    ></video>
+    >
+      {#each portalVideoSources as source}
+        <source src={source.src} type={source.type} />
+      {/each}
+    </video>
   </div>
 </section>

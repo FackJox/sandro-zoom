@@ -7,6 +7,7 @@
   import SectionLabel from './SectionLabel.svelte';
   import LensBug from './LensBug.svelte';
   import { createEventDispatcher } from 'svelte';
+  import { getVideoSources } from '$lib/utils/video';
 
   export let filmPortalReady = false;
 
@@ -212,7 +213,11 @@
           {#if film.src.endsWith('.jpg') || film.src.endsWith('.avif')}
             <img class={mediaClass} src={film.src} alt={film.title} loading="lazy" />
           {:else}
-            <video class={mediaClass} src={film.src} autoplay muted loop playsinline></video>
+            <video class={mediaClass} autoplay muted loop playsinline>
+              {#each getVideoSources(film.src) as source}
+                <source src={source.src} type={source.type} />
+              {/each}
+            </video>
           {/if}
         </div>
         <h2 class={headingClass}>{film.title}</h2>

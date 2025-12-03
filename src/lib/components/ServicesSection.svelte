@@ -4,6 +4,7 @@
   import { heading, body } from '$styled-system/recipes';
   import { layout } from '$design/system';
   import { gsap, brandEase, SCROLL_ORCHESTRATOR_CONTEXT_KEY, type ScrollOrchestrator } from '$lib/motion';
+  import { getVideoSources } from '$lib/utils/video';
 
   let root: HTMLElement;
   let videoEl: HTMLVideoElement;
@@ -143,7 +144,11 @@
 </script>
 
 <section bind:this={root} class={sectionClass} id="services">
-  <video bind:this={videoEl} class={videoClass} autoplay muted playsinline loop src="/videos/brand-film-x.mp4"></video>
+  <video bind:this={videoEl} class={videoClass} autoplay muted playsinline loop>
+    {#each getVideoSources('/videos/brand-film-x.mp4') as source}
+      <source src={source.src} type={source.type} />
+    {/each}
+  </video>
 
   <div class={creditsClass} bind:this={credits}>
     <h2 class={labelClass}>Services / Credits</h2>

@@ -5,6 +5,7 @@
   import { layout } from '$design/system';
   import { gsap, brandEase, SCROLL_ORCHESTRATOR_CONTEXT_KEY, type ScrollOrchestrator } from '$lib/motion';
   import SectionLabel from './SectionLabel.svelte';
+  import { getVideoSources } from '$lib/utils/video';
 
   let root: HTMLElement;
 
@@ -106,7 +107,11 @@
     {#each stories as story}
       <article class={cardClass} bind:this={story.ref}>
         <div class={mediaClass}>
-          <video class={videoClass} src={story.src} autoplay muted loop playsinline></video>
+          <video class={videoClass} autoplay muted loop playsinline>
+            {#each getVideoSources(story.src) as source}
+              <source src={source.src} type={source.type} />
+            {/each}
+          </video>
         </div>
         <h2 class={titleClass}>{story.title}</h2>
       </article>
