@@ -44,6 +44,15 @@ export function initHeroTimelines(options: HeroTimelineOptions) {
 
   const copyTargets = options.copyLines.filter((node): node is HTMLElement => Boolean(node));
 
+  const restoreHeroMetadata = () => {
+    setMetadataText(HERO_METADATA);
+    markMetadataDetached(false);
+    markLensElementDetached(false);
+    gsap.set(options.metadata, {
+      clearProps: 'transform,backgroundColor,color,borderColor,letterSpacing,paddingTop,paddingBottom,opacity'
+    });
+  };
+
   const ctx = gsap.context(() => {
     const introTl = gsap.timeline({ defaults: { ease: brandEase } });
 
@@ -74,13 +83,11 @@ export function initHeroTimelines(options: HeroTimelineOptions) {
       onUpdate(self) {
         setLensSegmentProgress(heroSegment, self.progress);
         if (self.progress <= 0.05) {
-          markLensElementDetached(false);
-          markMetadataDetached(false);
+          restoreHeroMetadata();
         }
       },
       onLeaveBack() {
-        markLensElementDetached(false);
-        markMetadataDetached(false);
+        restoreHeroMetadata();
       }
     }
   });

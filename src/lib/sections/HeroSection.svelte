@@ -11,7 +11,12 @@
     setLensHome,
     markLensElementDetached
   } from '$lib/motion/lensTimeline';
-  import { metadataText, setMetadataElement, markMetadataDetached } from '$lib/motion/metadata';
+  import {
+    metadataText,
+    setMetadataElement,
+    markMetadataDetached,
+    setMetadataHome
+  } from '$lib/motion/metadata';
   import { initHeroTimelines } from './HeroSection.motion';
 
   const heroVideoSrc = '/videos/showreel.mp4';
@@ -21,6 +26,7 @@
   let slab: HTMLElement;
   let lensHome: HTMLDivElement;
   let lensMotion: HTMLDivElement;
+  let metadataDock: HTMLDivElement | null = null;
   let metadata: HTMLDivElement;
   let titleEl: HTMLElement;
   let subtitleEl: HTMLElement;
@@ -50,6 +56,9 @@
     setLensElement(lensMotion);
     markMetadataDetached(false);
     markLensElementDetached(false);
+    if (metadataDock) {
+      setMetadataHome(metadataDock);
+    }
 
     destroy = initHeroTimelines({
       root,
@@ -70,10 +79,15 @@
     setLensElement(null);
     setLensHome(null);
     markLensElementDetached(false);
+    setMetadataHome(null);
   });
 
   $: if (metadata) {
     setMetadataElement(metadata);
+  }
+
+  $: if (metadataDock) {
+    setMetadataHome(metadataDock);
   }
 
   function handleLensEnter() {
@@ -211,6 +225,10 @@
     letterSpacing: '0.3em',
     textTransform: 'uppercase'
   });
+
+  const metadataDockClass = css({
+    width: '100%'
+  });
 </script>
 
 <section class={hero} bind:this={root} id="hero">
@@ -251,7 +269,9 @@
       <p class={slabFooter} bind:this={footerEl}>Field Notes — 2014 → 2024</p>
     </article>
 
-    <MetadataStrip bind:ref={metadata} text={$metadataText} />
+    <div class={metadataDockClass} bind:this={metadataDock}>
+      <MetadataStrip bind:ref={metadata} text={$metadataText} />
+    </div>
 
     <p class={scrollHint}>Scroll</p>
   </div>

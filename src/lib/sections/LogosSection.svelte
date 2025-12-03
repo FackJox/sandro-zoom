@@ -5,7 +5,7 @@
   import { layout } from '$design/system';
   import FrameBorder from '$lib/components/FrameBorder.svelte';
   import { lensElement, lensHome, lensDetached } from '$lib/motion/lensTimeline';
-  import { metadataNode, metadataDetached } from '$lib/motion/metadata';
+  import { metadataNode, metadataDetached, metadataHome } from '$lib/motion/metadata';
   import { initLogosTimelines } from './LogosSection.motion';
 
   const logos = [
@@ -34,28 +34,57 @@
 
   let destroy: (() => void) | undefined;
   let mounted = false;
-  let metadataReady = false;
+  let metadataDetachedState = false;
   let lensReady = false;
   let lensNode: HTMLElement | null = null;
   let lensHomeNode: HTMLElement | null = null;
+  let metadataHomeNode: HTMLElement | null = null;
+  let railHome: HTMLElement | null = null;
   const dispatch = createEventDispatcher<{ 'portal:film-ready': { progress: number } }>();
 
   function attachMetadata() {
-    if (!metadataReady) return;
-    if (metadataStrip && metadataHost && metadataStrip.parentElement !== metadataHost) {
-      metadataHost.appendChild(metadataStrip);
+    if (!metadataStrip) return;
+
+    const target = metadataDetachedState ? metadataHost : metadataHomeNode;
+    if (!target) return;
+
+    if (metadataStrip.parentElement !== target) {
+      target.appendChild(metadataStrip);
+    }
+
+    if (metadataDetachedState) {
       metadataStrip.style.marginTop = '0';
       metadataStrip.style.paddingBottom = '0.75rem';
+    } else {
+      metadataStrip.style.marginTop = '';
+      metadataStrip.style.paddingBottom = '';
+      metadataStrip.style.paddingTop = '';
+      metadataStrip.style.backgroundColor = '';
+      metadataStrip.style.color = '';
+      metadataStrip.style.borderColor = '';
+      metadataStrip.style.letterSpacing = '';
     }
-    attachRail();
+
+    syncRail();
   }
 
-  function attachRail() {
-    if (!metadataReady || !metadataStrip || !rail) return;
-    if (rail.parentElement !== metadataStrip) {
-      metadataStrip.appendChild(rail);
+  function syncRail() {
+    if (!rail) return;
+    if (!railHome && rail.parentElement) {
+      railHome = rail.parentElement as HTMLElement;
     }
-    rail.style.opacity = '1';
+
+    if (metadataDetachedState && metadataStrip) {
+      if (rail.parentElement !== metadataStrip) {
+        metadataStrip.appendChild(rail);
+      }
+      rail.style.opacity = '1';
+    } else if (railHome) {
+      if (rail.parentElement !== railHome) {
+        railHome.appendChild(rail);
+      }
+      rail.style.opacity = '0';
+    }
   }
 
   function attachLens() {
@@ -68,7 +97,7 @@
   }
 
   function initIfReady() {
-    if (!mounted || !metadataStrip || !metadataReady || destroy) return;
+    if (!mounted || !metadataStrip || !metadataDetachedState || destroy) return;
     destroy = initLogosTimelines({
       root,
       rail,
@@ -92,11 +121,20 @@
   });
 
   const detachedUnsub = metadataDetached.subscribe((value) => {
-    metadataReady = value;
+    metadataDetachedState = value;
+    if (!metadataDetachedState && destroy) {
+      destroy();
+      destroy = undefined;
+    }
     attachMetadata();
     attachLens();
-    attachRail();
+    syncRail();
     initIfReady();
+  });
+
+  const metadataHomeUnsub = metadataHome.subscribe((node) => {
+    metadataHomeNode = node;
+    attachMetadata();
   });
 
   const lensElementUnsub = lensElement.subscribe((node) => {
@@ -126,6 +164,7 @@
     destroy?.();
     metadataUnsub();
     detachedUnsub();
+    metadataHomeUnsub();
     lensElementUnsub();
     lensHomeUnsub();
     lensDetachedUnsub();
