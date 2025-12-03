@@ -1,0 +1,33 @@
+{
+	"name": "sandro-zoom",
+	"private": true,
+	"version": "0.0.1",
+	"type": "module",
+	"scripts": {
+		"dev": "vite dev",
+		"build": "vite build",
+		"preview": "vite preview",
+		"prepare": "svelte-kit sync || echo ''",
+		"check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
+		"check:watch": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json --watch"
+	},
+	"devDependencies": {
+		"@pandacss/dev": "^1.6.0",
+		"@pandacss/preset-panda": "^1.6.0",
+		"@sveltejs/adapter-auto": "^7.0.0",
+		"@sveltejs/kit": "^2.48.5",
+		"@sveltejs/vite-plugin-svelte": "^6.2.1",
+		"@types/three": "^0.181.0",
+		"svelte": "^5.43.8",
+		"svelte-check": "^4.3.4",
+		"typescript": "^5.9.3",
+		"vite": "^7.2.2"
+	},
+	"dependencies": {
+		"@fontsource/ibm-plex-sans": "^5.2.8",
+		"@fontsource/oswald": "^5.2.8",
+		"@threlte/core": "^8.3.1",
+		"gsap": "^3.13.0",
+		"three": "^0.181.2"
+	}
+}
