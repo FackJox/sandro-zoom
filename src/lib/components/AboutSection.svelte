@@ -1,9 +1,9 @@
 <script lang="ts">
-  import { onMount, tick } from 'svelte';
+  import { getContext, onDestroy, onMount, tick } from 'svelte';
   import { css, cx } from '$styled-system/css';
   import { heading, body } from '$styled-system/recipes';
   import { layout } from '$design/system';
-  import { gsap, brandEase } from '$lib/motion';
+  import { gsap, brandEase, SCROLL_ORCHESTRATOR_CONTEXT_KEY, type ScrollOrchestrator } from '$lib/motion';
   import SectionLabel from './SectionLabel.svelte';
 
   let root: HTMLElement;
@@ -67,8 +67,17 @@
   const headingClass = cx(heading({ size: 'md' }), css({ color: 'text' }));
   const bodyClass = cx(body({ tone: 'standard' }), css({ mt: '1rem' }));
 
+  const orchestrator =
+    getContext<ScrollOrchestrator | undefined>(SCROLL_ORCHESTRATOR_CONTEXT_KEY);
+  let timeline: gsap.core.Timeline | null = null;
+  let timelineDisposer: (() => void) | null = null;
+
   onMount(async () => {
     await tick();
+
+    timeline?.kill();
+    timelineDisposer?.();
+    timelineDisposer = null;
 
     const tl = gsap.timeline({
       scrollTrigger: {
@@ -99,6 +108,18 @@
         );
       }
     });
+
+    timeline = tl;
+    if (orchestrator) {
+      timelineDisposer = orchestrator.registerSectionTimeline('about', () => tl);
+    }
+  });
+
+  onDestroy(() => {
+    timeline?.kill();
+    timeline = null;
+    timelineDisposer?.();
+    timelineDisposer = null;
   });
 </script>
 

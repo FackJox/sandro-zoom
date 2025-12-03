@@ -1,9 +1,9 @@
 <script lang="ts">
-  import { onMount, tick } from 'svelte';
+  import { getContext, onDestroy, onMount, tick } from 'svelte';
   import { css, cx } from '$styled-system/css';
   import { heading } from '$styled-system/recipes';
   import { layout } from '$design/system';
-  import { gsap, brandEase } from '$lib/motion';
+  import { gsap, brandEase, SCROLL_ORCHESTRATOR_CONTEXT_KEY, type ScrollOrchestrator } from '$lib/motion';
   import SectionLabel from './SectionLabel.svelte';
 
   let root: HTMLElement;
@@ -44,8 +44,17 @@
   const videoClass = css({ width: '100%', height: '100%', objectFit: 'cover' });
   const titleClass = cx(heading({ size: 'sm' }), css({ color: 'text' }));
 
+  const orchestrator =
+    getContext<ScrollOrchestrator | undefined>(SCROLL_ORCHESTRATOR_CONTEXT_KEY);
+  let timeline: gsap.core.Timeline | null = null;
+  let timelineDisposer: (() => void) | null = null;
+
   onMount(async () => {
     await tick();
+
+    timeline?.kill();
+    timelineDisposer?.();
+    timelineDisposer = null;
 
     const tl = gsap.timeline({
       scrollTrigger: {
@@ -76,6 +85,18 @@
         );
       }
     });
+
+    timeline = tl;
+    if (orchestrator) {
+      timelineDisposer = orchestrator.registerSectionTimeline('film-stories', () => tl);
+    }
+  });
+
+  onDestroy(() => {
+    timeline?.kill();
+    timeline = null;
+    timelineDisposer?.();
+    timelineDisposer = null;
   });
 </script>
 

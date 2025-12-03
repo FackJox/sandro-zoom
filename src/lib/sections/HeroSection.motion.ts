@@ -1,12 +1,20 @@
-import { gsap, ScrollTrigger, brandEase } from '$lib/motion';
+import { gsap, ScrollTrigger, brandEase, type ScrollOrchestrator } from '$lib/motion';
 import {
   registerLensSegment,
   setLensSegmentProgress,
   tweenLensProxy,
   lensDefaultState,
-  markLensElementDetached
+  markLensElementDetached,
+  attachLensToSection
 } from '$lib/motion/lensTimeline';
-import { HERO_METADATA, LOGOS_METADATA, setMetadataText, markMetadataDetached } from '$lib/motion/metadata';
+import {
+  HERO_METADATA,
+  LOGOS_METADATA,
+  markMetadataDetached,
+  popMetadataState,
+  pushMetadataState,
+  setCurrentMetadata
+} from '$lib/motion/metadata';
 
 interface HeroTimelineOptions {
   root: HTMLElement;
@@ -17,6 +25,7 @@ interface HeroTimelineOptions {
   halo: HTMLElement;
   strips: Array<HTMLVideoElement | null>;
   copyLines: Array<HTMLElement | null>;
+  orchestrator?: ScrollOrchestrator;
 }
 
 export function initHeroTimelines(options: HeroTimelineOptions) {
@@ -24,11 +33,26 @@ export function initHeroTimelines(options: HeroTimelineOptions) {
     return;
   }
 
-  setMetadataText(HERO_METADATA);
+  setCurrentMetadata(HERO_METADATA);
 
   const prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
   const animations: gsap.core.Animation[] = [];
   const triggers: ScrollTrigger[] = [];
+  console.debug(
+    '[hero-motion] init',
+    'hasRoot',
+    Boolean(options.root),
+    'hasMedia',
+    Boolean(options.media),
+    'hasLens',
+    Boolean(options.lens),
+    'hasMetadata',
+    Boolean(options.metadata),
+    'stripCount',
+    options.strips.filter(Boolean).length,
+    'copyCount',
+    options.copyLines.filter(Boolean).length
+  );
   const heroSegment = registerLensSegment('hero', (tl, proxy, emit) => {
     tl.to(proxy, {
       xPercent: 12,
@@ -44,17 +68,26 @@ export function initHeroTimelines(options: HeroTimelineOptions) {
 
   const copyTargets = options.copyLines.filter((node): node is HTMLElement => Boolean(node));
 
+  let logosMetadataActive = false;
+
   const restoreHeroMetadata = () => {
-    setMetadataText(HERO_METADATA);
+    if (logosMetadataActive) {
+      popMetadataState('logos');
+      logosMetadataActive = false;
+    } else {
+      setCurrentMetadata(HERO_METADATA);
+    }
     markMetadataDetached(false);
     markLensElementDetached(false);
+    attachLensToSection('hero');
     gsap.set(options.metadata, {
       clearProps: 'transform,backgroundColor,color,borderColor,letterSpacing,paddingTop,paddingBottom,opacity'
     });
   };
 
+  let introTl: gsap.core.Timeline | null = null;
   const ctx = gsap.context(() => {
-    const introTl = gsap.timeline({ defaults: { ease: brandEase } });
+    introTl = gsap.timeline({ defaults: { ease: brandEase } });
 
     introTl
       .from(options.media, { opacity: 0, scale: 1.02, duration: 0.8 })
@@ -70,6 +103,21 @@ export function initHeroTimelines(options: HeroTimelineOptions) {
       );
     }
   }, options.root);
+
+  const heroTimelineDisposers: Array<() => void> = [];
+
+  const registerAnimation = (name: string, animation: gsap.core.Animation) => {
+    animations.push(animation);
+    if (options.orchestrator) {
+      heroTimelineDisposers.push(
+        options.orchestrator.registerSectionTimeline(name, () => animation)
+      );
+    }
+  };
+
+  if (introTl) {
+    registerAnimation('hero:intro', introTl);
+  }
 
   const morphTl = gsap.timeline({
     defaults: { ease: brandEase },
@@ -125,9 +173,15 @@ export function initHeroTimelines(options: HeroTimelineOptions) {
     )
     .to(options.metadata, { opacity: 0, duration: 0.2 }, '>-0.05')
     .call(() => {
-      setMetadataText(LOGOS_METADATA);
+      if (!logosMetadataActive) {
+        pushMetadataState({ id: 'logos', text: LOGOS_METADATA });
+        logosMetadataActive = true;
+      } else {
+        setCurrentMetadata(LOGOS_METADATA);
+      }
       markMetadataDetached(true);
       markLensElementDetached(true);
+      attachLensToSection('logos');
     })
     .to(options.metadata, { opacity: 1, duration: 0.2 }, '>-0.05')
     .to(options.halo, { opacity: 0, duration: 0.2 }, '>-0.1');
@@ -135,6 +189,8 @@ export function initHeroTimelines(options: HeroTimelineOptions) {
   if (morphTl.scrollTrigger) {
     triggers.push(morphTl.scrollTrigger);
   }
+
+  registerAnimation('hero:morph', morphTl);
 
   if (!prefersReducedMotion) {
     const slabParallax = gsap.to(options.slab, {
@@ -147,7 +203,7 @@ export function initHeroTimelines(options: HeroTimelineOptions) {
         scrub: true
       }
     });
-    animations.push(slabParallax);
+    registerAnimation('hero:slabParallax', slabParallax);
 
     const lensParallax = tweenLensProxy({
       idleOffset: -6,
@@ -159,7 +215,7 @@ export function initHeroTimelines(options: HeroTimelineOptions) {
         scrub: true
       }
     });
-    animations.push(lensParallax);
+    registerAnimation('hero:lensParallax', lensParallax);
 
     sliceElements.forEach((slice, index) => {
       const stripTween = gsap.to(slice, {
@@ -174,7 +230,7 @@ export function initHeroTimelines(options: HeroTimelineOptions) {
           scrub: true
         }
       });
-      animations.push(stripTween);
+      registerAnimation(`hero:strip-${index}`, stripTween);
     });
 
     const mediaDrift = gsap.to(options.media, {
@@ -184,14 +240,20 @@ export function initHeroTimelines(options: HeroTimelineOptions) {
       yoyo: true,
       ease: 'power1.inOut'
     });
-    animations.push(mediaDrift);
+    registerAnimation('hero:mediaDrift', mediaDrift);
   } else {
     Object.assign(lensDefaultState, { idleOffset: 0 });
   }
 
   return () => {
     ctx.revert();
+    heroTimelineDisposers.forEach((dispose) => dispose());
+    heroTimelineDisposers.length = 0;
     triggers.forEach((trigger) => trigger.kill());
     animations.forEach((animation) => animation.kill());
+    if (logosMetadataActive) {
+      popMetadataState('logos');
+      logosMetadataActive = false;
+    }
   };
 }

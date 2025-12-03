@@ -1,11 +1,11 @@
 <script lang="ts">
-  import { onMount, tick } from 'svelte';
+  import { getContext, onDestroy, onMount, tick } from 'svelte';
   import { Canvas, T } from '@threlte/core';
   import type { Mesh } from 'three';
   import { css, cx } from '$styled-system/css';
   import { heading, body } from '$styled-system/recipes';
   import { layout } from '$design/system';
-  import { gsap, brandEase } from '$lib/motion';
+  import { gsap, brandEase, SCROLL_ORCHESTRATOR_CONTEXT_KEY, type ScrollOrchestrator } from '$lib/motion';
 
   let root: HTMLElement;
   let contactBlock: HTMLElement;
@@ -29,9 +29,18 @@
   const headingClass = heading({ size: 'md' });
   const bodyClass = cx(body({ tone: 'standard' }), css({ mt: '0.75rem' }));
 
+  const orchestrator =
+    getContext<ScrollOrchestrator | undefined>(SCROLL_ORCHESTRATOR_CONTEXT_KEY);
+  let timeline: gsap.core.Timeline | null = null;
+  let timelineDisposer: (() => void) | null = null;
+
   onMount(async () => {
     await tick();
     if (!screenMesh) return;
+
+    timeline?.kill();
+    timelineDisposer?.();
+    timelineDisposer = null;
 
     const tl = gsap.timeline({
       scrollTrigger: {
@@ -53,6 +62,18 @@
       { opacity: 1, y: 0, duration: 0.6 },
       '>-0.2'
     );
+
+    timeline = tl;
+    if (orchestrator) {
+      timelineDisposer = orchestrator.registerSectionTimeline('final-contact', () => tl);
+    }
+  });
+
+  onDestroy(() => {
+    timeline?.kill();
+    timeline = null;
+    timelineDisposer?.();
+    timelineDisposer = null;
   });
 </script>
 

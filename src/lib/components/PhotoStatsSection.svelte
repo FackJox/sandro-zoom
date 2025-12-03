@@ -1,9 +1,9 @@
 <script lang="ts">
-  import { onMount } from 'svelte';
+  import { getContext, onDestroy, onMount } from 'svelte';
   import { css, cx } from '$styled-system/css';
   import { heading, body } from '$styled-system/recipes';
   import { layout } from '$design/system';
-  import { gsap, ScrollTrigger } from '$lib/motion';
+  import { gsap, SCROLL_ORCHESTRATOR_CONTEXT_KEY, type ScrollOrchestrator } from '$lib/motion';
   import SectionLabel from './SectionLabel.svelte';
 
   let root: HTMLElement;
@@ -62,23 +62,48 @@
   const panelHeading = heading({ size: 'sm' });
   const panelBody = body({ tone: 'standard' });
 
+  const orchestrator =
+    getContext<ScrollOrchestrator | undefined>(SCROLL_ORCHESTRATOR_CONTEXT_KEY);
+  let timeline: gsap.core.Timeline | null = null;
+  let timelineDisposer: (() => void) | null = null;
+
+  function cleanupTimeline() {
+    timeline?.kill();
+    timeline = null;
+    timelineDisposer?.();
+    timelineDisposer = null;
+  }
+
   onMount(() => {
-    const st = ScrollTrigger.create({
-      trigger: root,
-      start: 'top top',
-      end: '+=150%',
-      scrub: true,
-      pin: true,
-      onUpdate(self) {
-        const p = self.progress;
-        const threshold = 0.5;
-        const t = gsap.utils.clamp(0, 1, (p - threshold + 0.2) / 0.4);
-        gsap.set(successBlock, { opacity: 1 - t });
-        gsap.set(failBlock, { opacity: t });
+    cleanupTimeline();
+    const tl = gsap.timeline({
+      scrollTrigger: {
+        trigger: root,
+        start: 'top top',
+        end: '+=150%',
+        scrub: true,
+        pin: true,
+        onUpdate(self) {
+          const p = self.progress;
+          const threshold = 0.5;
+          const t = gsap.utils.clamp(0, 1, (p - threshold + 0.2) / 0.4);
+          gsap.set(successBlock, { opacity: 1 - t });
+          gsap.set(failBlock, { opacity: t });
+        }
       }
     });
 
-    return () => st.kill();
+    // Timeline only exists for ScrollTrigger coordination; add a dummy tween.
+    tl.to({}, { duration: 1 });
+
+    timeline = tl;
+    if (orchestrator) {
+      timelineDisposer = orchestrator.registerSectionTimeline('photo-stats', () => tl);
+    }
+  });
+
+  onDestroy(() => {
+    cleanupTimeline();
   });
 </script>
 

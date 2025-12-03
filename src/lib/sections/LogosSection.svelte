@@ -1,11 +1,16 @@
 <script lang="ts">
-  import { onDestroy, onMount, createEventDispatcher } from 'svelte';
+  import { createEventDispatcher, getContext, onDestroy, onMount } from 'svelte';
   import { css, cx } from '$styled-system/css';
   import { body } from '$styled-system/recipes';
   import { layout } from '$design/system';
   import FrameBorder from '$lib/components/FrameBorder.svelte';
   import { lensElement, lensHome, lensDetached } from '$lib/motion/lensTimeline';
   import { metadataNode, metadataDetached, metadataHome } from '$lib/motion/metadata';
+  import {
+    SCROLL_ORCHESTRATOR_CONTEXT_KEY,
+    type ScrollOrchestrator
+  } from '$lib/motion';
+  import { createPortalContext } from '$lib/motion/portalStore';
   import { initLogosTimelines } from './LogosSection.motion';
 
   const logos = [
@@ -41,6 +46,11 @@
   let metadataHomeNode: HTMLElement | null = null;
   let railHome: HTMLElement | null = null;
   const dispatch = createEventDispatcher<{ 'portal:film-ready': { progress: number } }>();
+  const orchestrator =
+    getContext<ScrollOrchestrator | undefined>(SCROLL_ORCHESTRATOR_CONTEXT_KEY);
+  const portalContext = createPortalContext('logos');
+
+  $: portalContext.attachElement(portal ?? null);
 
   function attachMetadata() {
     if (!metadataStrip) return;
@@ -106,7 +116,9 @@
       metadata: metadataStrip,
       portalLogo: portalLogoClone,
       portalVideo,
-      onPortalReady: () => dispatch('portal:film-ready', { progress: 1 })
+      onPortalReady: () => dispatch('portal:film-ready', { progress: 1 }),
+      orchestrator,
+      portalContext
     });
   }
 
@@ -125,6 +137,7 @@
     if (!metadataDetachedState && destroy) {
       destroy();
       destroy = undefined;
+      portalContext.reset();
     }
     attachMetadata();
     attachLens();
@@ -158,6 +171,7 @@
     attachMetadata();
     attachLens();
     initIfReady();
+    portalContext.attachElement(portal ?? null);
   });
 
   onDestroy(() => {
@@ -168,6 +182,8 @@
     lensElementUnsub();
     lensHomeUnsub();
     lensDetachedUnsub();
+    portalContext.reset();
+    portalContext.attachElement(null);
   });
 
   const section = css({

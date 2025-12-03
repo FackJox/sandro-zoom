@@ -1,9 +1,9 @@
 <script lang="ts">
-  import { onMount, onDestroy, tick } from 'svelte';
+  import { getContext, onMount, onDestroy, tick } from 'svelte';
   import { css, cx } from '$styled-system/css';
   import { body, heading } from '$styled-system/recipes';
   import { layout } from '$design/system';
-  import { gsap, brandEase } from '$lib/motion';
+  import { gsap, brandEase, SCROLL_ORCHESTRATOR_CONTEXT_KEY, type ScrollOrchestrator } from '$lib/motion';
   import SectionLabel from './SectionLabel.svelte';
   import LensBug from './LensBug.svelte';
   import { createEventDispatcher } from 'svelte';
@@ -13,9 +13,12 @@
   let root: HTMLElement;
   let mounted = false;
   let timeline: gsap.core.Timeline | null = null;
+  let timelineDisposer: (() => void) | null = null;
 
   const dispatch = createEventDispatcher<{ 'film:exit': void }>();
   let activeIndex = 0;
+  const orchestrator =
+    getContext<ScrollOrchestrator | undefined>(SCROLL_ORCHESTRATOR_CONTEXT_KEY);
 
   type FilmCard = {
     id: string;
@@ -113,11 +116,13 @@
     if (timeline) {
       timeline.kill();
       timeline = null;
+      timelineDisposer?.();
+      timelineDisposer = null;
     }
 
     await tick();
 
-    timeline = gsap.timeline({
+    const tl = gsap.timeline({
       scrollTrigger: {
         trigger: root,
         start: 'top top',
@@ -132,17 +137,17 @@
       const card = films[index]?.ref;
       const nextCard = films[index + 1]?.ref;
 
-      if (timeline && index === 0 && card) {
-        timeline
+      if (tl && index === 0 && card) {
+        tl
           .fromTo(card, { autoAlpha: 0 }, { autoAlpha: 1, duration: 0.3 }, 0)
           .call(() => {
             activeIndex = 0;
           }, undefined, 0.05);
       }
 
-      if (timeline && card && nextCard) {
+      if (tl && card && nextCard) {
         const start = (index + 0.95) / films.length;
-        timeline
+        tl
           .to(
             card,
             {
@@ -163,9 +168,13 @@
       }
     });
 
-    timeline?.call(() => {
+    tl.call(() => {
       dispatch('film:exit');
     }, undefined, '+=0.2');
+    timeline = tl;
+    if (orchestrator) {
+      timelineDisposer = orchestrator.registerSectionTimeline('big-film', () => tl);
+    }
   }
 
   onMount(() => {
@@ -181,6 +190,8 @@
 
   onDestroy(() => {
     timeline?.kill();
+    timelineDisposer?.();
+    timelineDisposer = null;
   });
 </script>
 

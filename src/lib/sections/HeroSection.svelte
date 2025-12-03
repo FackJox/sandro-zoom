@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onDestroy, onMount } from 'svelte';
+  import { getContext, onDestroy, onMount } from 'svelte';
   import { css } from '$styled-system/css';
   import { layout } from '$design/system';
   import LensBadge from '$lib/components/LensBadge.svelte';
@@ -9,7 +9,8 @@
     lensDefaultState,
     setLensElement,
     setLensHome,
-    markLensElementDetached
+    markLensElementDetached,
+    attachLensToSection
   } from '$lib/motion/lensTimeline';
   import {
     metadataText,
@@ -17,6 +18,10 @@
     markMetadataDetached,
     setMetadataHome
   } from '$lib/motion/metadata';
+  import {
+    SCROLL_ORCHESTRATOR_CONTEXT_KEY,
+    type ScrollOrchestrator
+  } from '$lib/motion';
   import { initHeroTimelines } from './HeroSection.motion';
 
   const heroVideoSrc = '/videos/showreel.mp4';
@@ -40,6 +45,9 @@
   let allowHover = false;
   let lensHover = false;
 
+  const orchestrator =
+    getContext<ScrollOrchestrator | undefined>(SCROLL_ORCHESTRATOR_CONTEXT_KEY);
+
   let lensSnapshot = lensDefaultState;
   $: lensSnapshot = $lensStore;
 
@@ -56,10 +64,15 @@
     setLensElement(lensMotion);
     markMetadataDetached(false);
     markLensElementDetached(false);
+    attachLensToSection('hero');
     if (metadataDock) {
       setMetadataHome(metadataDock);
     }
 
+    console.debug('[hero] onMount', {
+      hasMetadataDock: Boolean(metadataDock),
+      hasMetadata: Boolean(metadata)
+    });
     destroy = initHeroTimelines({
       root,
       media: bgVideo,
@@ -68,7 +81,8 @@
       metadata,
       halo,
       strips,
-      copyLines: [titleEl, subtitleEl, bodyEl, footerEl]
+      copyLines: [titleEl, subtitleEl, bodyEl, footerEl],
+      orchestrator
     });
   });
 
@@ -79,10 +93,12 @@
     setLensElement(null);
     setLensHome(null);
     markLensElementDetached(false);
+    attachLensToSection(null);
     setMetadataHome(null);
   });
 
   $: if (metadata) {
+    console.debug('[hero] metadata ref assigned', Boolean(metadata));
     setMetadataElement(metadata);
   }
 

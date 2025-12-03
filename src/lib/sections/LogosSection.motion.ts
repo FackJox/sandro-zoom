@@ -1,5 +1,6 @@
-import { gsap, ScrollTrigger, brandEase } from '$lib/motion';
+import { gsap, brandEase, type ScrollOrchestrator } from '$lib/motion';
 import { registerLensSegment, setLensSegmentProgress } from '$lib/motion/lensTimeline';
+import type { PortalContext, PortalTimelineHandle } from '$lib/motion/portalStore';
 
 interface LogosTimelineOptions {
   root: HTMLElement;
@@ -10,6 +11,8 @@ interface LogosTimelineOptions {
   portalLogo?: HTMLElement | null;
   portalVideo?: HTMLVideoElement | null;
   onPortalReady?: () => void;
+  orchestrator?: ScrollOrchestrator;
+  portalContext?: PortalContext;
 }
 
 export function initLogosTimelines(options: LogosTimelineOptions) {
@@ -18,7 +21,22 @@ export function initLogosTimelines(options: LogosTimelineOptions) {
   }
 
   const animations: gsap.core.Animation[] = [];
-  const triggers: ScrollTrigger[] = [];
+  const timelineDisposers: Array<() => void> = [];
+  console.debug(
+    '[logos-motion] init',
+    'hasRoot',
+    Boolean(options.root),
+    'hasRail',
+    Boolean(options.rail),
+    'hasMetadata',
+    Boolean(options.metadata),
+    'hasPortal',
+    Boolean(options.portal),
+    'hasNetflixLogo',
+    Boolean(options.netflixLogo),
+    'orchestrator',
+    Boolean(options.orchestrator)
+  );
 
   const logosSegment = registerLensSegment('logos', (tl, proxy, emit) => {
     tl.to(proxy, {
@@ -31,31 +49,56 @@ export function initLogosTimelines(options: LogosTimelineOptions) {
     });
   });
 
-  const pin = ScrollTrigger.create({
-    trigger: options.root,
-    start: 'top top',
-    end: '+=200%',
-    pin: true,
-    scrub: true,
-    anticipatePin: 1,
-    onUpdate(self) {
-      setLensSegmentProgress(logosSegment, self.progress);
+  const registerAnimation = (name: string, animation: gsap.core.Animation) => {
+    animations.push(animation);
+    if (options.orchestrator) {
+      timelineDisposers.push(
+        options.orchestrator.registerSectionTimeline(name, () => animation)
+      );
+    }
+  };
+
+  const masterTimeline = gsap.timeline({
+    defaults: { ease: brandEase },
+    scrollTrigger: {
+      trigger: options.root,
+      start: 'top top',
+      end: '+=200%',
+      pin: true,
+      scrub: true,
+      anticipatePin: 1,
+      onUpdate(self) {
+        setLensSegmentProgress(logosSegment, self.progress);
+      }
     }
   });
-  triggers.push(pin);
 
-  animations.push(
-    gsap.to(options.rail, {
-      xPercent: -10,
-      ease: 'none',
+  masterTimeline.to({}, { duration: 1 });
+  registerAnimation('logos:master', masterTimeline);
+
+  const railDrift = gsap.to(options.rail, {
+    xPercent: -10,
+    ease: 'none',
+    scrollTrigger: {
+      trigger: options.root,
+      start: 'top bottom',
+      end: 'bottom top',
+      scrub: true
+    }
+  });
+  registerAnimation('logos:rail-drift', railDrift);
+
+  const railEntry = gsap
+    .timeline({
+      defaults: { ease: brandEase },
       scrollTrigger: {
         trigger: options.root,
         start: 'top bottom',
-        end: 'bottom top',
-        scrub: true
+        toggleActions: 'play none none reverse'
       }
     })
-  );
+    .from(options.rail, { y: 50, opacity: 0, duration: 0.6 });
+  registerAnimation('logos:rail-entry', railEntry);
 
   const portalCircle = options.portal;
   const portalLogoClone = options.portalLogo;
@@ -66,45 +109,66 @@ export function initLogosTimelines(options: LogosTimelineOptions) {
     portalLogoClone.textContent = netflix.textContent ?? '';
   }
 
-  const updateCirclePosition = () => {
+  let portalHandle: PortalTimelineHandle | null = null;
+  const repositionPortal = () => {
+    if (portalHandle) {
+      portalHandle.updatePosition();
+      return;
+    }
     if (!portalCircle || !netflix) return;
     const rect = netflix.getBoundingClientRect();
     portalCircle.style.left = `${rect.left + rect.width / 2}px`;
     portalCircle.style.top = `${rect.top + rect.height / 2}px`;
   };
 
-  const portalTl = gsap
-    .timeline({
-      scrollTrigger: {
-        trigger: options.root,
-        start: 'top+=60% top',
-        end: 'bottom top',
-        scrub: true,
-        onUpdate: () => updateCirclePosition()
-      },
-      defaults: { ease: brandEase }
-    })
-    .set(portalCircle, { opacity: 0, width: 48, height: 48, borderRadius: '999px' })
-    .to(portalCircle, { opacity: 1, duration: 0.2 }, 0)
-    .to(options.root, { backgroundColor: 'var(--colors-blackStallion)' }, 0.3)
-    .to(options.rail, { opacity: 0 }, 0.3)
-    .to(portalCircle, { width: '85vw', height: '48vw', duration: 0.9 }, 0.3)
-    .to(portalCircle, { borderRadius: '24px', duration: 0.4 }, 0.5)
-    .call(() => options.onPortalReady?.(), undefined, '>-0.05')
-    .to(portalCircle, { opacity: 0, duration: 0.3 }, '+=0.1');
+  const portalTl = gsap.timeline({
+    scrollTrigger: {
+      trigger: options.root,
+      start: 'top+=60% top',
+      end: 'bottom top',
+      scrub: true,
+      onUpdate: () => repositionPortal()
+    },
+    defaults: { ease: brandEase }
+  });
 
-  if (portalLogoClone) {
-    portalTl.to(portalLogoClone, { opacity: 0, duration: 0.3 }, 0.35);
+  if (options.portalContext) {
+    portalHandle = options.portalContext.buildPortalTimeline({
+      timeline: portalTl,
+      getTargetRect: () => options.netflixLogo?.getBoundingClientRect() ?? null,
+      textTarget: portalLogoClone ?? undefined,
+      videoTarget: portalVideo ?? undefined,
+      onReveal: options.onPortalReady
+    });
+  } else {
+    portalTl
+      .set(portalCircle, {
+        opacity: 0,
+        width: 48,
+        height: 48,
+        borderRadius: '999px'
+      })
+      .to(portalCircle, { opacity: 1, duration: 0.2 }, 0)
+      .to(portalCircle, { width: '85vw', height: '48vw', duration: 0.9 }, 0.3)
+      .to(portalCircle, { borderRadius: '24px', duration: 0.4 }, 0.5)
+      .call(() => options.onPortalReady?.(), undefined, '>-0.05')
+      .to(portalCircle, { opacity: 0, duration: 0.3 }, '+=0.1');
+
+    if (portalLogoClone) {
+      portalTl.to(portalLogoClone, { opacity: 0, duration: 0.3 }, 0.35);
+    }
+
+    if (portalVideo) {
+      portalTl.set(portalVideo, { opacity: 0 });
+      portalTl.to(portalVideo, { opacity: 1, duration: 0.4 }, 0.45);
+    }
   }
 
-  if (portalVideo) {
-    portalTl.set(portalVideo, { opacity: 0 });
-    portalTl.to(portalVideo, { opacity: 1, duration: 0.4 }, 0.45);
-  }
+  portalTl.to(options.root, { backgroundColor: 'var(--colors-blackStallion)' }, 0.3);
+  portalTl.to(options.rail, { opacity: 0 }, 0.3);
+  repositionPortal();
 
-  updateCirclePosition();
-
-  animations.push(portalTl);
+  registerAnimation('logos:portal', portalTl);
 
   // Continue animating the same MetadataStrip element that originated in Hero so the
   // shared-element morph feels seamless between sections.
@@ -133,12 +197,13 @@ export function initLogosTimelines(options: LogosTimelineOptions) {
         },
         0
       );
-
-    animations.push(metadataTl);
+    registerAnimation('logos:metadata', metadataTl);
   }
 
   return () => {
-    triggers.forEach((trigger) => trigger.kill());
+    timelineDisposers.forEach((dispose) => dispose());
+    timelineDisposers.length = 0;
     animations.forEach((animation) => animation.kill());
+    portalHandle?.cleanup();
   };
 }

@@ -1,38 +1,37 @@
-# sv
+# Sandro Zoom
 
-Everything you need to build a Svelte project, powered by [`sv`](https://github.com/sveltejs/cli).
+High-altitude cinematography portfolio built with SvelteKit, GSAP, and Panda CSS. The project now ships a shared motion shell so scroll-driven sections plug into a single GSAP orchestrator instead of scattering timelines across components.
 
-## Creating a project
-
-If you're seeing this, you've probably already done this step. Congrats!
+## Getting Started
 
 ```sh
-# create a new project in the current directory
-npx sv create
-
-# create a new project in my-app
-npx sv create my-app
-```
-
-## Developing
-
-Once you've created a project and installed dependencies with `npm install` (or `pnpm install` or `yarn`), start a development server:
-
-```sh
+npm install
 npm run dev
-
-# or start the server and open the app in a new browser tab
-npm run dev -- --open
 ```
 
-## Building
+Useful scripts:
 
-To create a production version of your app:
+- `npm run dev` – start Vite in dev mode.
+- `npm run build` / `npm run preview` – production build + preview.
+- `npm run check` – typecheck and validate Svelte components.
+- `npm run lint:motion` – aliases `svelte-check` for motion-centric edits (documented below).
 
-```sh
-npm run build
-```
+## Motion Shell Docs
 
-You can preview the production build with `npm run preview`.
+`docs/architecture/motion-shell.md` covers:
 
-> To deploy your app, you may need to install an [adapter](https://svelte.dev/docs/kit/adapters) for your target environment.
+- Scroll orchestrator API (`registerSectionTimeline`, ScrollSmoother lifecycle).
+- Shared element stores (lens badge, metadata strip, portal mask).
+- Integration checklist for new sections.
+- Feature-flagging guidelines and verification commands.
+
+Read that file before adjusting motion code so new sections stay aligned with the orchestration layer.
+
+## Feature Flags
+
+Framework 2+ sections are disabled by default to keep experimentation isolated. Append `?framework2=1` to the URL (or set the `framework2Enabled` store) to render the additional scenes.
+
+## Verification
+
+- `npm run check` – project-wide type check.
+- `npm run lint:motion` – lightweight alias used in the motion shell QA checklist.
