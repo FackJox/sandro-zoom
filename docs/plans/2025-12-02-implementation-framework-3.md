@@ -4,10 +4,15 @@
 
 **Goal:** Execute Framework 3’s lens-driven Big Film Story experience, including the lens-iris entry from logos, pinned card scrollytelling with circular iris transitions, concentric-ring exit into Film Stories, and persistent HUD elements, all respecting the Panda CSS token system.
 
-**Architecture:** Centralize screenplay data (three hero cards) in a typed data module, render them through a `BigFilmStory` Svelte component, and orchestrate transitions using GSAP timelines that share state with Logos + Film Stories sections via a lightweight event bus. Panda CSS handles responsive layouts and HUD styling; ScrollTrigger pins the viewport while GSAP clips animate card swaps using CSS `clip-path` + SVG overlays.
+**Architecture:** Continue building on the motion shell: timelines register through `scrollOrchestrator`, ScrollSmoother drives scroll physics, the `portalStore` owns circular masks, and shared lens/metadata controllers keep HUD state consistent with Hero/Logos. All Framework 3 work lives behind the `framework2Enabled` feature flag (or future `framework3Enabled` if added) so Framework 1 remains unaffected.
 
 **Tech Stack:** SvelteKit, Panda CSS, GSAP/ScrollTrigger, TypeScript, Panda recipes, native video elements (mp4/hls), optional YouTube iframe API.
 
+**GSAP / Interaction Guidelines**
+- All animation work must use the GSAP suite (core, ScrollTrigger, ScrollSmoother, Flip, MotionPath, DrawSVG/MorphSVG, Draggable). Register timelines via the orchestrator so smoothing/reduced-motion fallbacks remain consistent.
+- Prioritize cinematic beats (portal zoom, iris transitions, exit sequences) with GSAP timelines and staggered reveals; reserve CSS transitions for trivial hover states only.
+- Apply 3D lift through GSAP push-ins and Egg Toast frame highlights (no drop shadows). Cards should feel like they press forward a few pixels, echoing the “camera creep” motion spec from the Brand Design System.
+- Keep the zoomed-lens aesthetic tight by leveraging GSAP snap/custom easing and MotionPath helpers wherever precise camera pulls or SVG morphs are required.
 ---
 
 ### Task 1: Data + config scaffolding
@@ -75,7 +80,7 @@ Add `filmViewport`, `filmHud`, and `irisOverlay` recipes describing the pinned v
 
 **Steps**
 
-1. Update portal timeline to include:
+1. Update portal timeline to include (still driven by the shared `portalContext` + orchestrator timeline registration):
    - Egg Toast lens ring with tick marks (`<svg>` overlay) that fades in as circle expands.
    - Quick note overlay “NETFLIX / 14 PEAKS”.
    
@@ -91,7 +96,7 @@ Add `filmViewport`, `filmHud`, and `irisOverlay` recipes describing the pinned v
    
    **Checklist Reference**
    > **Logos → Big Film (FILM)** – Land with full-screen FILM intro state.
-3. Dispatch `film:entered` custom event for analytics + inter-section coordination.
+3. Dispatch `film:entered` custom event for analytics + inter-section coordination (Svelte dispatcher). The orchestrator still owns the GSAP instance so rewinding works with ScrollSmoother.
    
    **Design Cross-Reference — Framework 3.md**
    > Entry transition Step 3 ensures landing triggers FILM layout begin; event enforces same.
@@ -156,6 +161,8 @@ Implement DOM per Framework 3 ASCII:
 
 Use Panda responsive utilities to switch from stacked layout (mobile) to split columns (desktop) exactly as described in Framework 3. Media frames share aspect ratio + letterbox borders.
 
+Render this section only when `$framework2Enabled` (or a dedicated Framework 3 flag) is true inside `+page.svelte` so Framework 1 releases stay untouched.
+
 **Design Cross-Reference — Framework 3.md**
 > Sections 3.3 (mobile) & 3.4 (desktop) sketch identical DOM structure (pinned viewport, slab, step indicator, lens bug).
 
@@ -164,14 +171,15 @@ Use Panda responsive utilities to switch from stacked layout (mobile) to split c
 
 **Step 2: Motion implementation**
 
-`BigFilmStory.motion.ts` exports `initBigFilmStory({ root, cards, slab, indicator, lens })` that:
+`BigFilmStory.motion.ts` exports `initBigFilmStory({ root, cards, slab, indicator, lens, orchestrator })` that:
 
-- Pins section (`ScrollTrigger.create({ pin: true, scrub: true, end: '+=300%' })`).
+- Pins section (`ScrollTrigger.create({ pin: true, scrub: true, end: '+=300%' })`) and registers all GSAP timelines through `scrollOrchestrator.registerSectionTimeline(...)`.
 - For each card boundary:
   - Shrinks `clipPath: circle()` to 0.8, crossfades to next card, re-expands to rectangle (duration 0.25s, `brand-enter`).
   - Animates slab text via `gsap.timeline` (current slides up/out, next slides from bottom with 80 ms text line staggering).
   - Updates step indicator by toggling Panda `data-active` attr (GSAP `to` on CSS variables).
 - Maintains persistent lens bug (small scale blip on each transition).
+- Lens HUD uses `heroLensController` / `lensTimeline` so detaching from Logos and attaching to Film stays in sync with Hero state.
 
 **Design Cross-Reference — Framework 3.md**
 > ## 3.5 In-section motion: cards as shots on a timeline — details the circular iris transitions, slab motion, indicator updates, and lens bug behaviour.
@@ -223,7 +231,7 @@ Add `aria-live="polite"` to slab to announce card change text; ensure buttons ha
 
 On final ScrollTrigger progress ≥ 0.98:
 
-- `gsap.timeline` steps:
+- `gsap.timeline` steps (registered as `big-film:exit` via orchestrator):
   1. `gsap.to(activeCard, { scale: 0.92, duration: 0.3 })`
   2. Add concentric ring overlays (SVG) with `autoAlpha` fade-ins.
   3. Use `gsap.utils.wrap` to position cards as horizontal strip (xPercent of -120, 0, 120).

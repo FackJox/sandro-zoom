@@ -4,10 +4,15 @@
 
 **Goal:** Implement the ABOUT ME scrollytelling chapter defined in Framework 4, including the lens-centered transition from Photo Stats, three beat layouts that stay cohesive across breakpoints, scroll-pinned focus pulls between beats, and the grid-flip handoff into Services.
 
-**Architecture:** Reuse Panda CSS tokens/recipes to build a `AboutSection` component that renders three full-viewport beats powered by data. GSAP ScrollTriggers manage the central lens mask, text crossfades, and background swaps. Transition out via a grid flip timeline that triggers the Services section video. All copy and media references come directly from Framework 4.
+**Architecture:** Keep everything inside the existing motion shell. `PhotoStatsSection`, `AboutSection`, and `ServicesSection` register their GSAP timelines through `scrollOrchestrator` so ScrollSmoother + reduced-motion fallbacks continue working. Lens + metadata interactions use the shared controllers, and portal / grid overlays reuse the shared stores (e.g., `portalStore`) rather than bespoke DOM. Feature gating stays aligned with the Framework 2 flag until a Framework 4 flag is introduced.
 
 **Tech Stack:** SvelteKit, Panda CSS, GSAP + ScrollTrigger, TypeScript, video/image assets hosted in `static/pictures` & `static/videos`.
 
+**GSAP / Interaction Guidelines**
+- Route every animation through GSAP (core, ScrollTrigger, ScrollSmoother, Flip, MotionPath, DrawSVG/MorphSVG, Draggable) and register timelines with the orchestrator for consistent lifecycle management.
+- Focus on high-impact storytelling beats (Photo→About portal, beat focus pulls, grid flip) using GSAP timelines and staggered reveals; CSS transitions are reserved for very simple hover states.
+- Achieve depth via GSAP push-ins and Egg Toast frame-line reveals; rely on contrast + motion instead of persistent drop shadows.
+- Maintain the grid-flip aesthetic described in Framework 4 by snapping movements, using custom easing, and employing MotionPath/SVG helpers whenever the spec calls for precise pulls, curves, or tile morphs.
 ---
 
 ### Task 1: Prepare data + recipes
@@ -71,7 +76,7 @@ Define `beatLayout` (full-viewport absolute panel), `beatCopy`, `beatIndicator`.
 
 **Step 1: Portal helper**
 
-`PhotoToAboutPortal.ts` should export `initPhotoAboutPortal({ statsCardRef, portalMaskRef, onComplete })` that:
+`PhotoToAboutPortal.ts` should export `initPhotoAboutPortal({ portalContext, statsCardRef, onComplete })` that leverages `createPortalContext('photo')`:
 
 - Positions an Egg Toast circular mask in the center of `statsCardRef`.
 - Animates stats copy fade-out, About copy fade-in inside the circle.
@@ -152,6 +157,8 @@ Add `prefers-reduced-motion` guard: swap to simple fade if user opts out.
 
 Use Panda responsive utilities to stack copy over background on mobile and split into two columns on desktop (left = BG, right = copy).
 
+Keep the section behind the existing Framework 2 feature flag (or a future Framework 4 one) in `+page.svelte` until sign-off.
+
 **Design Cross-Reference — Framework 4.md**
 > ## 3. Layout – ABOUT ME (Mobile) & ## 4. Layout – ABOUT ME (Desktop) provide the exact markup structure.
 
@@ -160,7 +167,7 @@ Use Panda responsive utilities to stack copy over background on mobile and split
 
 **Step 2: Motion logic**
 
-`AboutSection.motion.ts` handles:
+`AboutSection.motion.ts` handles (each GSAP timeline registered through `scrollOrchestrator.registerSectionTimeline('about:*', ...)`):
 
 - Pinning section for ~300% scroll.
 - For each beat boundary (0/0.33/0.66/1):
@@ -240,7 +247,7 @@ Tiles inherit screenshot of underlying DOM via `background` cloning (use Canvas 
 
 **Additional Requirement: Ghosted service labels**
 
-Before the grid tiles flip fully, fade in low-opacity “MOUNTAIN DOP / EXPED & PRODUCT…” labels behind the About copy so the user glimpses the upcoming services content during the lens zoom-out.
+Before the grid tiles flip fully, fade in low-opacity “MOUNTAIN DOP / EXPED & PRODUCT…” labels behind the About copy so the user glimpses the upcoming services content during the grid-flip buildup.
 
 **Design Cross-Reference — Framework 4.md**
 > “As user nears end of Beat 3… Overlay Egg Toast grid lines… convert entire viewport into grid of tiles.”  
@@ -251,7 +258,7 @@ Before the grid tiles flip fully, fade in low-opacity “MOUNTAIN DOP / EXPED & 
 
 **Step 3: Integration**
 
-`AboutSection` triggers grid timeline when ScrollTrigger progress ≥ 0.98 (end of Beat 3). Services listens for event to autoplay video.
+`AboutSection` triggers grid timeline when ScrollTrigger progress ≥ 0.98 (end of Beat 3). Services listens for event to autoplay video; both timelines are registered with the orchestrator so rewinds/flags behave predictably.
 
 **Design Cross-Reference — Framework 4.md**
 > Section 5 “About → Services” indicates trigger occurs as user nears end of Beat 3 with grid overlay pause.

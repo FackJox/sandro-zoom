@@ -8,6 +8,7 @@ The motion shell centralizes every scroll-linked animation so Framework sections
   - Registers ScrollTrigger + ScrollSmoother (or the ticker fallback when `prefers-reduced-motion` is enabled or the plugin cannot load).
   - Exposes `registerSectionTimeline(name, build)` and `cleanupSectionTimeline(name)` APIs. Each call stores a disposer so hot reload and navigation clean up their GSAP timelines.
   - Provides `SCROLL_ORCHESTRATOR_CONTEXT_KEY` so `<MainScroll>` can publish the orchestrator via Svelte context. Sections retrieve it with `getContext` and register their timelines instead of creating detached instances.
+  - ScrollSmoother runs by default (GSAP plugin now bundled). Set `VITE_ENABLE_SCROLL_SMOOTHER=false` if you need to temporarily fall back to native scrolling. Reduced-motion users are automatically routed to the fallback path.
 
 - `src/lib/motion/lensTimeline.ts`
   - Ships `createLensController(id)` for sections that need independent lens behavior.

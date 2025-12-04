@@ -4,10 +4,15 @@
 
 **Goal:** Deliver the FILM / Big Film Story section exactly as described in Framework 2, including the Netflix portal entry, pinned 3-step scrollytelling cards, and the portal zoom exit into the next film stories.
 
-**Architecture:** Compose a dedicated `FilmSection` Svelte component that pins its viewport, swaps Panda-styled card slabs via ScrollTrigger progress, and sequences the iris transitions using GSAP timelines. Shared UI (section label, lens bug, step indicator) reuses Panda recipes to keep typography and spacing consistent with Framework 1.
+**Architecture:** Plug into the existing motion shell (`scrollOrchestrator`, ScrollSmoother, shared lens/metadata stores, portal store). The dedicated `BigFilmSection` Svelte component must register all GSAP timelines through the orchestrator context, reuse the shared lens badge controller, and drive the Netflix portal via `createPortalContext('logos')`. Feature gating flows through the `framework2Enabled` store so Framework 1 remains isolated unless explicitly enabled.
 
 **Tech Stack:** SvelteKit, Panda CSS, GSAP + ScrollTrigger, TypeScript, Vite video streaming pipeline.
 
+**GSAP / Interaction Guidelines**
+- Use the full GSAP suite for all animation work (GSAP core, ScrollTrigger, ScrollSmoother, Flip, MotionPath, DrawSVG/MorphSVG, Draggable as needed). Register timelines through the orchestrator so ScrollSmoother + reduced-motion fallbacks stay consistent.
+- Emphasize high-impact beats with orchestrated GSAP timelines (page load stagger, portal morphs, iris transitions). Simple hover states may use CSS transitions, but anything multi-step belongs in GSAP.
+- For interaction depth, use GSAP-driven push-ins (`scale: 1 → 1.04`) and frame-line highlights (per Brand Design System “cards” notes). Avoid drop shadows; separation should happen via motion, contrast, and Egg Toast keylines.
+- Match the zoomed-lens aesthetic by using custom easing/snap values in GSAP (e.g., `brandEase`) and MotionPath tooling for precise parallax paths that feel like camera pulls.
 ---
 
 ### Task 1: Extend Panda recipes for FILM slabs + progress indicators
@@ -97,15 +102,15 @@ git commit -am "feat: add film card & step indicator recipes"
 **Files:**
 - Create: `src/lib/sections/FilmEntryPortal.ts`
 - Modify: `src/lib/sections/LogosSection.svelte`
-- Modify: `src/lib/sections/FilmSection.svelte`
+- Modify: `src/lib/components/BigFilmSection.svelte`
 
 **Step 1: Portal helper**
 
-`FilmEntryPortal.ts` should expose `createPortalTimeline({ logoEl, portalMaskEl, onComplete })` that:
+`FilmEntryPortal.ts` should expose `createPortalTimeline({ portalContext, logoEl, onComplete })` that leverages `createPortalContext('logos')`:
 
 - Wraps the Netflix `<span>` with `<span class="logo__portal-target">`.
-- Creates a circular `<div>` mask positioned via `getBoundingClientRect`.
-- GSAP timeline: logos scale 1 → 0.9, circle scale 1 → 8, crossfade content to first FILM frame, morph circle → rectangle.
+- Uses the shared portal mask element managed by `portalContext` (no ad-hoc DOM nodes).
+- GSAP timeline: logos scale 1 → 0.9, circle scale 1 → 8, crossfade content to first FILM frame, morph circle → rectangle. Register the timeline via `scrollOrchestrator.registerSectionTimeline('logos:portal', ...)`.
 
 **Design Cross-Reference — Framework 2.md**
 > ### 4.1 Entry (Logos → FILM)
@@ -119,7 +124,7 @@ git commit -am "feat: add film card & step indicator recipes"
 
 **Step 2: Wire to Logos section**
 
-On `ScrollTrigger` enter (`end: 'bottom top'`), call `createPortalTimeline` and dispatch a custom event `portal:film-ready` to inform the FILM section when to start playing the 14 Peaks video.
+On `ScrollTrigger` enter (`end: 'bottom top'`), call `createPortalTimeline` and dispatch a custom event `portal:film-ready` to inform the Big Film section when to start playing the 14 Peaks video. The GSAP instances must be registered through the orchestrator context so teardown/replay continue to work with ScrollSmoother/resets.
 
 **Design Cross-Reference — Framework 2.md**
 > ### 4.1 Entry (Logos → FILM) details the trigger happening “at end of logos band” with the Netflix mask expanding into the FILM frame.
@@ -129,7 +134,7 @@ On `ScrollTrigger` enter (`end: 'bottom top'`), call `createPortalTimeline` and 
 
 **Step 3: Receive in Film section**
 
-`FilmSection.svelte` listens for the event (e.g., via `eventBus` store or Svelte `createEventDispatcher`) to reset video playback and step indicator.
+`BigFilmSection.svelte` listens for the event (Svelte `createEventDispatcher`) to reset video playback and step indicator. Lens/HUD state is derived from the shared `lensTimeline` controller instead of bespoke state.
 
 **Design Cross-Reference — Framework 2.md**
 > ### 4.1 Entry ... Step 3 states “The expanded circle becomes the video frame mask for the FILM hero...”
@@ -162,8 +167,8 @@ Record Lottie or GIF of portal for design approval.
 ### Task 3: Build Film section layout + pinned scroll behaviour
 
 **Files:**
-- Create: `src/lib/sections/FilmSection.svelte`
-- Create: `src/lib/sections/FilmSection.motion.ts`
+- Create: `src/lib/components/BigFilmSection.svelte`
+- Create: `src/lib/sections/BigFilmSection.motion.ts`
 - Asset refs: `static/videos/film-14-peaks.mp4`, etc.
 
 **Step 1: Layout markup**
@@ -186,6 +191,8 @@ Conform exactly to Framework 2 mobile/tablet/desktop diagrams:
 
 Switch layout via CSS grid at `min-width: 960px` to create side-by-side arrangement.
 
+Gate the section with `$framework2Enabled` (existing feature flag store) inside `+page.svelte` so Framework 1 builds stay stable.
+
 **Additional Requirement: Lens HUD continuity**
 
 Feed the `<LensBadge>` component in this section from the same store-driven GSAP timeline used in Hero/Logos so it gently scales/rotates through each card transition instead of re-rendering per step.
@@ -204,9 +211,9 @@ Feed the `<LensBadge>` component in this section from the same store-driven GSAP
 
 **Step 2: ScrollTrigger timeline**
 
-`FilmSection.motion.ts`:
+`BigFilmSection.motion.ts`:
 
-- Pin `root`.
+- Pin `root` via `scrollOrchestrator.registerSectionTimeline('big-film:pin', ...)`.
 - Map scroll progress to `cardIndex` ranges (0–0.3, 0.3–0.65, 0.65–1).
 - For each transition, run iris animation (`clipPath: circle()` or Three mask) + text slab swap per Framework 2 timings.
 
@@ -229,7 +236,7 @@ Store card metadata (title, body, src, type) in `src/lib/data/film-cards.ts`; it
 
 **Step 4: Idle states**
 
-Add `prefers-reduced-motion` guards to pause ScrollTrigger effects when user opts out.
+Add `prefers-reduced-motion` guards to pause ScrollTrigger effects when user opts out while still keeping orchestrator registration for consistency.
 
 **Design Cross-Reference — Framework 2.md**
 > Under 4.2 Step 3 – lens ◯ section: “motion remains Level 1 here (minimal)” — demonstrates expectation for subtle idle behaviour and respect for user comfort.

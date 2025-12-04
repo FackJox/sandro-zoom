@@ -12,14 +12,11 @@
   const shell = css({
     minHeight: '100vh',
     backgroundColor: 'bg',
-    color: 'text',
-    display: 'flex',
-    flexDirection: 'column'
+    color: 'text'
   });
   const contentShell = css({
-    minHeight: '100%',
-    display: 'flex',
-    flexDirection: 'column'
+    minHeight: '100vh',
+    width: '100%'
   });
 
   let rootEl: HTMLElement | null = null;
