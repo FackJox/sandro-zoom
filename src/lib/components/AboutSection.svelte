@@ -5,8 +5,11 @@
   import { layout } from '$design/system';
   import { gsap, brandEase, SCROLL_ORCHESTRATOR_CONTEXT_KEY, type ScrollOrchestrator } from '$lib/motion';
   import SectionLabel from './SectionLabel.svelte';
+  import StepIndicator from './StepIndicator.svelte';
 
   let root: HTMLElement;
+  let focusRing: HTMLDivElement | null = null;
+  let activeIndex = 0;
 
   type Beat = {
     title: string;
@@ -56,7 +59,8 @@
     overflow: 'hidden',
     display: 'flex',
     alignItems: 'flex-end',
-    opacity: 0
+    opacity: 0,
+    clipPath: 'circle(0% at 50% 50%)'
   });
   const overlayClass = css({
     position: 'absolute',
@@ -66,11 +70,42 @@
   const copyClass = css({ position: 'relative', zIndex: 1, p: '2rem' });
   const headingClass = cx(heading({ size: 'md' }), css({ color: 'text' }));
   const bodyClass = cx(body({ tone: 'standard' }), css({ mt: '1rem' }));
+  const aboutSteps = content.map((beat) => beat.title);
+
+  const indicatorWrap = css({ mt: '2rem' });
+  const focusRingClass = css({
+    position: 'absolute',
+    width: '90px',
+    height: '90px',
+    borderRadius: '999px',
+    borderWidth: '2px',
+    borderColor: 'accent',
+    pointerEvents: 'none',
+    mixBlendMode: 'screen',
+    top: 0,
+    left: 0,
+    transform: 'translate(-50%, -50%)'
+  });
 
   const orchestrator =
     getContext<ScrollOrchestrator | undefined>(SCROLL_ORCHESTRATOR_CONTEXT_KEY);
   let timeline: gsap.core.Timeline | null = null;
   let timelineDisposer: (() => void) | null = null;
+
+  function moveRing(target: HTMLElement | null, immediate = false) {
+    if (!target || !focusRing) return;
+    const rect = target.getBoundingClientRect();
+    const rootRect = root?.getBoundingClientRect();
+    if (!rootRect) return;
+    const x = rect.left - rootRect.left + rect.width * 0.75;
+    const y = rect.top - rootRect.top + rect.height * 0.25;
+    gsap.to(focusRing, {
+      x,
+      y,
+      duration: immediate ? 0 : 0.4,
+      ease: brandEase
+    });
+  }
 
   onMount(async () => {
     await tick();
@@ -90,22 +125,47 @@
       defaults: { ease: brandEase }
     });
 
+    content.forEach((beat, index) => {
+      const node = beat.ref;
+      if (!node) return;
+      gsap.set(node, {
+        autoAlpha: index === 0 ? 1 : 0,
+        clipPath: index === 0 ? 'circle(140% at 50% 50%)' : 'circle(0% at 50% 50%)'
+      });
+    });
+    activeIndex = 0;
+    moveRing(content[0]?.ref ?? null, true);
+
     content.forEach((_, i) => {
       const beat = content[i]?.ref;
       const next = content[i + 1]?.ref;
 
-      if (i === 0 && beat) {
-        tl.fromTo(beat, { autoAlpha: 0 }, { autoAlpha: 1, duration: 0.3 }, 0);
-      }
-
       if (beat && next) {
         const t = (i + 0.9) / content.length;
-        tl.to(beat, { autoAlpha: 0, scale: 0.96, duration: 0.3 }, t).fromTo(
-          next,
-          { autoAlpha: 0, scale: 1.04 },
-          { autoAlpha: 1, scale: 1, duration: 0.3 },
-          t + 0.05
-        );
+        tl
+          .to(
+            beat,
+            {
+              clipPath: 'circle(0% at 50% 50%)',
+              autoAlpha: 0,
+              duration: 0.35
+            },
+            t
+          )
+          .fromTo(
+            next,
+            { clipPath: 'circle(0% at 50% 50%)', autoAlpha: 0 },
+            { clipPath: 'circle(140% at 50% 50%)', autoAlpha: 1, duration: 0.4 },
+            t + 0.05
+          )
+          .call(
+            (idx: number) => {
+              activeIndex = idx;
+              moveRing(content[idx]?.ref ?? null);
+            },
+            [i + 1],
+            t + 0.08
+          );
       }
     });
 
@@ -139,4 +199,8 @@
       </div>
     </article>
   {/each}
+  <div class={focusRingClass} bind:this={focusRing} aria-hidden="true"></div>
+  <div class={indicatorWrap}>
+    <StepIndicator steps={aboutSteps} activeIndex={activeIndex} />
+  </div>
 </section>

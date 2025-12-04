@@ -12,6 +12,8 @@ type CreatePortalTimelineOptions = {
   portalContext?: PortalContext;
   portalLogoClone?: HTMLElement | null;
   portalVideo?: HTMLVideoElement | null;
+  portalFrame?: HTMLElement | null;
+  portalHeading?: HTMLElement | null;
   orchestrator?: ScrollOrchestrator;
   onComplete?: () => void;
 };
@@ -71,6 +73,12 @@ export function createPortalTimeline(options: CreatePortalTimelineOptions) {
     getTargetRect: () => target.getBoundingClientRect(),
     textTarget: options.portalLogoClone ?? undefined,
     videoTarget: options.portalVideo ?? undefined,
+    frameElement: options.portalFrame ?? undefined,
+    headingElement: options.portalHeading ?? undefined,
+    expandWidth: '70vw',
+    expandHeight: '70vw',
+    frameWidth: '92vw',
+    frameHeight: '38.5vw',
     onReveal: options.onComplete
   });
 

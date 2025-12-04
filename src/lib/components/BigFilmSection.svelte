@@ -179,7 +179,7 @@
     aspectRatio: '2.39 / 1',
     borderWidth: '1px',
     borderColor: 'accent',
-    borderRadius: '12px',
+    borderRadius: '4px',
     overflow: 'hidden',
     backgroundColor: 'blackPearl',
     isolation: 'isolate'
@@ -213,7 +213,7 @@
     backgroundColor: 'accent',
     color: 'blackStallion',
     padding: { base: '1.5rem', md: '2rem' },
-    borderRadius: '12px',
+    borderRadius: '4px',
     borderWidth: '1px',
     borderColor: 'blackPearl',
     display: 'flex',

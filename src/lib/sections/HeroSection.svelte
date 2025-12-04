@@ -158,8 +158,7 @@ onDestroy(() => {
     maxWidth: layout.slabMax,
     marginX: { base: 'auto', lg: 0 },
     marginTop: { base: '5rem', md: '6rem' },
-    position: 'relative',
-    boxShadow: '0 30px 70px rgba(0,0,0,0.45)'
+    position: 'relative'
   });
 
   const lensWrap = css({

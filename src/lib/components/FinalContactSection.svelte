@@ -43,25 +43,34 @@
     timelineDisposer = null;
 
     const tl = gsap.timeline({
+      defaults: { ease: brandEase },
       scrollTrigger: {
         trigger: root,
-        start: 'top bottom',
-        end: 'top center',
-        scrub: true
-      },
-      defaults: { ease: brandEase }
+        start: 'top top',
+        end: '+=200%',
+        scrub: true,
+        pin: true
+      }
     });
 
-    tl.fromTo(
-      screenMesh.position,
-      { x: 0, y: 0, z: 0 },
-      { x: 1.2, y: -0.6, z: 2.5 }
-    ).fromTo(
-      contactBlock,
-      { opacity: 0, y: 20 },
-      { opacity: 1, y: 0, duration: 0.6 },
-      '>-0.2'
-    );
+    tl
+      .fromTo(
+        screenMesh.position,
+        { x: 0, y: 0, z: 3 },
+        { x: -1.2, y: 0.8, z: 1.5 }
+      )
+      .fromTo(
+        screenMesh.rotation,
+        { x: 0, y: 0, z: 0 },
+        { x: -0.4, y: 0.6, z: 0.1 },
+        0.4
+      )
+      .fromTo(
+        contactBlock,
+        { opacity: 0, y: 40 },
+        { opacity: 1, y: 0, duration: 0.6 },
+        0.6
+      );
 
     timeline = tl;
     if (orchestrator) {

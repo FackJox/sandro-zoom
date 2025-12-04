@@ -3,13 +3,16 @@
   import { css, cx } from '$styled-system/css';
   import { heading, body } from '$styled-system/recipes';
   import { layout } from '$design/system';
-  import { gsap, SCROLL_ORCHESTRATOR_CONTEXT_KEY, type ScrollOrchestrator } from '$lib/motion';
+import { gsap, brandEase, SCROLL_ORCHESTRATOR_CONTEXT_KEY, type ScrollOrchestrator } from '$lib/motion';
   import SectionLabel from './SectionLabel.svelte';
   import { getVideoSources } from '$lib/utils/video';
+  import StepIndicator from './StepIndicator.svelte';
 
   let root: HTMLElement;
   let successBlock: HTMLElement;
   let failBlock: HTMLElement;
+let focusRing: HTMLDivElement | null = null;
+let activeIndex = 0;
 
   const sectionClass = css({
     position: 'relative',
@@ -46,6 +49,7 @@
     backgroundColor: 'rgba(15, 23, 26, 0.9)',
     borderWidth: '1px',
     borderColor: 'border',
+    borderRadius: '4px',
     maxWidth: '26rem',
     width: '100%',
     position: 'relative',
@@ -62,12 +66,42 @@
   const hiddenPanel = css({ opacity: 0 });
   const panelHeading = heading({ size: 'sm' });
   const panelBody = body({ tone: 'standard' });
+  const indicatorWrap = css({ mt: '1.5rem' });
+  const focusRingClass = css({
+    position: 'absolute',
+    width: '70px',
+    height: '70px',
+    borderRadius: '999px',
+    borderWidth: '2px',
+    borderColor: 'accent',
+    pointerEvents: 'none',
+    mixBlendMode: 'screen',
+    top: 0,
+    left: 0,
+    transform: 'translate(-50%, -50%)'
+  });
+  const steps = ['Summits', 'Setbacks'];
 
-  const orchestrator =
-    getContext<ScrollOrchestrator | undefined>(SCROLL_ORCHESTRATOR_CONTEXT_KEY);
+const orchestrator =
+  getContext<ScrollOrchestrator | undefined>(SCROLL_ORCHESTRATOR_CONTEXT_KEY);
 let timeline: gsap.core.Timeline | null = null;
 let timelineDisposer: (() => void) | null = null;
 let disposed = false;
+
+function moveRing(target: HTMLElement | null, immediate = false) {
+  if (!target || !focusRing) return;
+  const rect = target.getBoundingClientRect();
+  const parentRect = target.parentElement?.getBoundingClientRect();
+  if (!parentRect) return;
+  const x = rect.left - parentRect.left + rect.width * 0.7;
+  const y = rect.top - parentRect.top + rect.height * 0.3;
+  gsap.to(focusRing, {
+    x,
+    y,
+    duration: immediate ? 0 : 0.4,
+    ease: brandEase
+  });
+}
 
   function cleanupTimeline() {
     timeline?.kill();
@@ -86,24 +120,43 @@ let disposed = false;
         return;
       }
 
+      gsap.set(successBlock, { clipPath: 'circle(140% at 50% 50%)', opacity: 1 });
+      gsap.set(failBlock, { clipPath: 'circle(0% at 50% 50%)', opacity: 0 });
+      moveRing(successBlock, true);
+
       const tl = gsap.timeline({
+        defaults: { ease: 'none' },
         scrollTrigger: {
           trigger: root,
           start: 'top top',
-          end: '+=150%',
+          end: '+=160%',
           scrub: true,
-          pin: true,
-          onUpdate(self) {
-            const p = self.progress;
-            const threshold = 0.5;
-            const t = gsap.utils.clamp(0, 1, (p - threshold + 0.2) / 0.4);
-            gsap.set(successBlock, { opacity: 1 - t });
-            gsap.set(failBlock, { opacity: t });
-          }
+          pin: true
         }
       });
 
-      tl.to({}, { duration: 1 });
+      tl
+        .to({}, { duration: 0.5 })
+        .to(
+          successBlock,
+          {
+            clipPath: 'circle(0% at 50% 50%)',
+            opacity: 0,
+            duration: 0.45,
+            ease: brandEase
+          },
+          0.5
+        )
+        .fromTo(
+          failBlock,
+          { clipPath: 'circle(0% at 50% 50%)', opacity: 0 },
+          { clipPath: 'circle(140% at 50% 50%)', opacity: 1, duration: 0.55, ease: brandEase },
+          0.7
+        )
+        .call(() => {
+          activeIndex = 1;
+          moveRing(failBlock);
+        }, undefined, 0.75);
 
       timeline = tl;
       if (orchestrator) {
@@ -143,6 +196,10 @@ let disposed = false;
         <p class={panelBody}>6000M MT LOGAN</p>
         <p class={panelBody}>5000M KOH E PAMIR</p>
       </div>
+      <div class={focusRingClass} bind:this={focusRing} aria-hidden="true"></div>
+    </div>
+    <div class={indicatorWrap}>
+      <StepIndicator steps={steps} activeIndex={activeIndex} />
     </div>
   </div>
 </section>

@@ -9,6 +9,10 @@ export interface PortalTimelineOptions {
   timeline?: gsap.core.Timeline;
   expandWidth?: number | string;
   expandHeight?: number | string;
+  frameWidth?: number | string;
+  frameHeight?: number | string;
+  frameElement?: HTMLElement | null;
+  headingElement?: HTMLElement | null;
 }
 
 export interface PortalTimelineHandle {
@@ -63,6 +67,9 @@ export function createPortalContext(id = 'primary'): PortalContext {
         defaults: { ease: brandEase }
       });
 
+    const frameWidth = options.frameWidth ?? '92vw';
+    const frameHeight = options.frameHeight ?? '38.5vw';
+
     timeline
       .set(
         portal,
@@ -83,14 +90,24 @@ export function createPortalContext(id = 'primary'): PortalContext {
         portal,
         {
           width: options.expandWidth ?? '85vw',
-          height: options.expandHeight ?? '48vw',
-          duration: 0.9
+          height: options.expandHeight ?? '85vw',
+          duration: 0.6
         },
         0.3
       )
-      .to(portal, { borderRadius: '24px', duration: 0.4 }, 0.5)
+      .to(portal, { borderRadius: '24px', duration: 0.35 }, 0.5)
+      .to(
+        portal,
+        {
+          width: frameWidth,
+          height: frameHeight,
+          borderRadius: '8px',
+          duration: 0.45
+        },
+        0.8
+      )
       .call(() => options.onReveal?.(), undefined, '>-0.05')
-      .to(portal, { opacity: 0, duration: 0.3 }, '+=0.1');
+      .to(portal, { opacity: 0, duration: 0.4 }, '+=0.25');
 
     if (options.textTarget) {
       timeline.to(options.textTarget, { opacity: 0, duration: 0.3 }, 0.35);
@@ -99,6 +116,20 @@ export function createPortalContext(id = 'primary'): PortalContext {
     if (options.videoTarget) {
       timeline.set(options.videoTarget, { opacity: 0 }, 0.3);
       timeline.to(options.videoTarget, { opacity: 1, duration: 0.4 }, 0.45);
+    }
+
+    if (options.frameElement) {
+      timeline.set(options.frameElement, { opacity: 0, scale: 1.05 }, 0);
+      timeline.to(options.frameElement, { opacity: 1, scale: 1, duration: 0.35 }, 0.85);
+    }
+
+    if (options.headingElement) {
+      timeline.set(options.headingElement, { opacity: 0, yPercent: 40 }, 0);
+      timeline.to(
+        options.headingElement,
+        { opacity: 1, yPercent: 0, duration: 0.35 },
+        0.92
+      );
     }
 
     const updatePosition = () => {

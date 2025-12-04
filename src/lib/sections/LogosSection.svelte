@@ -37,6 +37,8 @@
   let lensHost: HTMLDivElement;
   let portalLogoClone: HTMLSpanElement;
   let portalVideo: HTMLVideoElement;
+  let portalFrameEl: HTMLDivElement;
+  let portalHeadingEl: HTMLDivElement;
   const portalVideoSrc = '/videos/wix-video.mp4';
   const portalVideoSources = getVideoSources(portalVideoSrc);
 
@@ -133,6 +135,8 @@
       portalContext,
       portalLogoClone,
       portalVideo,
+      portalFrame: portalFrameEl,
+      portalHeading: portalHeadingEl,
       orchestrator,
       onComplete: () => dispatch('portal:film-ready', { progress: 1 })
     });
@@ -287,6 +291,26 @@
     overflow: 'hidden',
     transform: 'translate(-50%, -50%)'
   });
+  const portalFrame = css({
+    position: 'absolute',
+    inset: '4%',
+    borderWidth: '2px',
+    borderColor: 'accent',
+    borderStyle: 'solid',
+    opacity: 0,
+    pointerEvents: 'none'
+  });
+  const portalHeading = css({
+    position: 'absolute',
+    left: '1.5rem',
+    bottom: '1.25rem',
+    fontFamily: 'trade',
+    color: 'accent',
+    letterSpacing: '0.2em',
+    textTransform: 'uppercase',
+    fontSize: '0.9rem',
+    opacity: 0
+  });
 </script>
 
 <section class={section} bind:this={root} id="logos">
@@ -333,5 +357,7 @@
         <source src={source.src} type={source.type} />
       {/each}
     </video>
+    <div class={portalFrame} bind:this={portalFrameEl} aria-hidden="true"></div>
+    <div class={portalHeading} bind:this={portalHeadingEl}>Film — High Altitude Features</div>
   </div>
 </section>
