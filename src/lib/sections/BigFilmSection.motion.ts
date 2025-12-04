@@ -7,6 +7,8 @@ type BigFilmMotionOptions = {
   viewport: HTMLElement;
   slab: HTMLElement;
   mediaNodes: HTMLElement[];
+  labelElement?: HTMLElement | null;
+  previewStories?: Array<{ title: string; src: string }>;
   orchestrator?: ScrollOrchestrator;
   onStepChange?: (index: number) => void;
   onComplete?: () => void;
@@ -21,6 +23,17 @@ export function initBigFilmMotion(options: BigFilmMotionOptions) {
   const animations: gsap.core.Animation[] = [];
   const timelineDisposers: Array<() => void> = [];
   const prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  console.debug(
+    '[big-film-motion] init',
+    'mediaCount',
+    options.mediaNodes.length,
+    'prefersReducedMotion',
+    prefersReducedMotion,
+    'hasRoot',
+    Boolean(options.root),
+    'hasViewport',
+    Boolean(options.viewport)
+  );
 
   if (!options.root || !options.viewport || !options.slab || options.mediaNodes.length === 0) {
     console.warn('[big-film] missing targets, skipping motion setup');
@@ -28,6 +41,7 @@ export function initBigFilmMotion(options: BigFilmMotionOptions) {
   }
 
   const registerAnimation = (name: string, animation: gsap.core.Animation) => {
+    console.debug('[big-film-motion] register animation', name);
     animations.push(animation);
     if (options.orchestrator) {
       timelineDisposers.push(
@@ -87,10 +101,22 @@ export function initBigFilmMotion(options: BigFilmMotionOptions) {
       scrub: true,
       pin: true,
       anticipatePin: 1,
-      onEnter: () => attachLensToSection('film'),
-      onEnterBack: () => attachLensToSection('film'),
-      onLeave: () => attachLensToSection(null),
-      onLeaveBack: () => attachLensToSection('logos')
+      onEnter: () => {
+        console.debug('[big-film-motion] scrollTrigger enter');
+        attachLensToSection('film');
+      },
+      onEnterBack: () => {
+        console.debug('[big-film-motion] scrollTrigger enterBack');
+        attachLensToSection('film');
+      },
+      onLeave: () => {
+        console.debug('[big-film-motion] scrollTrigger leave');
+        attachLensToSection(null);
+      },
+      onLeaveBack: () => {
+        console.debug('[big-film-motion] scrollTrigger leaveBack');
+        attachLensToSection('logos');
+      }
     }
   });
 
@@ -99,6 +125,7 @@ export function initBigFilmMotion(options: BigFilmMotionOptions) {
     const current = options.mediaNodes[index];
     const next = options.mediaNodes[index + 1];
     if (!current || !next) return;
+    console.debug('[big-film-motion] stop configured', 'index', index, 'stop', stop);
 
     timeline
       .to(
@@ -129,11 +156,14 @@ export function initBigFilmMotion(options: BigFilmMotionOptions) {
     timeline,
     cards: options.mediaNodes,
     viewport: options.viewport,
+    previewStories: options.previewStories,
+    labelElement: options.labelElement,
     onPortalReady: options.onPortalReady
   });
 
   timeline.call(() => options.onComplete?.(), undefined, '+=0.2');
   registerAnimation('big-film:pin', timeline);
+  console.debug('[big-film-motion] timeline ready', 'duration', timeline.duration());
 
   return () => {
     timelineDisposers.forEach((dispose) => dispose());

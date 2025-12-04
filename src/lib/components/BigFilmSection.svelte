@@ -6,6 +6,7 @@
   import StepIndicator from '$lib/components/StepIndicator.svelte';
   import { layout } from '$design/system';
   import { filmCards } from '$lib/data/film-cards';
+  import { filmStories } from '$lib/data/film-stories';
   import { getVideoSources } from '$lib/utils/video';
   import { initBigFilmMotion } from '$lib/sections/BigFilmSection.motion';
   import { lensElement, lensAttachment } from '$lib/motion/lensTimeline';
@@ -26,6 +27,7 @@
   let viewport: HTMLElement;
   let slab: HTMLElement;
   let hudHost: HTMLElement;
+  let labelHost: HTMLDivElement | null = null;
   let mounted = false;
   let initializingMotion = false;
   let motionCleanup: (() => void) | null = null;
@@ -89,6 +91,7 @@
   }
 
   function handleStepChange(index: number) {
+    console.debug('[big-film] step change', index);
     activeIndex = index;
     videoNodes.forEach((video, idx) => {
       if (!video) return;
@@ -101,16 +104,30 @@
   }
 
   function handlePortalReady(detail: FilmExitDetail) {
+    console.debug('[big-film] portal ready detail', detail.focusRect?.width ?? null, detail.focusRect?.height ?? null);
     lastPortalDetail = detail;
     dispatch('film:exit', detail);
   }
 
   async function bootstrapMotion() {
-    if (initializingMotion || motionCleanup || !filmPortalReady) return;
+    if (initializingMotion || motionCleanup || !filmPortalReady) {
+      console.debug(
+        '[big-film] bootstrap skipped',
+        'initializing',
+        initializingMotion,
+        'hasCleanup',
+        Boolean(motionCleanup),
+        'filmPortalReady',
+        filmPortalReady
+      );
+      return;
+    }
+    console.debug('[big-film] bootstrap start');
     initializingMotion = true;
     await tick();
     collectMediaNodes();
     if (!mediaNodes.length || !root || !viewport || !slab) {
+      console.warn('[big-film] missing DOM refs for motion', 'mediaNodes', mediaNodes.length, 'hasRoot', Boolean(root), 'hasViewport', Boolean(viewport), 'hasSlab', Boolean(slab));
       initializingMotion = false;
       return;
     }
@@ -121,6 +138,8 @@
       viewport,
       slab,
       mediaNodes,
+      labelElement: labelHost,
+      previewStories: filmStories,
       orchestrator,
       onStepChange: handleStepChange,
       onComplete: () => {
@@ -130,6 +149,7 @@
       },
       onPortalReady: handlePortalReady
     });
+    console.debug('[big-film] motion initialized', 'mediaNodes', mediaNodes.length);
     initializingMotion = false;
   }
 
@@ -146,6 +166,7 @@
 
   onDestroy(() => {
     motionCleanup?.();
+    console.debug('[big-film] destroyed');
     motionCleanup = null;
     lensElementUnsub();
     lensAttachmentUnsub();
@@ -267,7 +288,9 @@
 </script>
 
 <section bind:this={root} class={sectionClass} id="film">
-  <SectionLabel prefix="Film" title="High Altitude Features" />
+  <div bind:this={labelHost}>
+    <SectionLabel prefix="Film" title="High Altitude Features" />
+  </div>
 
   <div class={grid}>
     <div class={viewportClass} bind:this={viewport}>

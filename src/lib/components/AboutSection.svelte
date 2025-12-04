@@ -8,8 +8,10 @@
   import StepIndicator from './StepIndicator.svelte';
 
   let root: HTMLElement;
-  let focusRing: HTMLDivElement | null = null;
-  let activeIndex = 0;
+let focusRing: HTMLDivElement | null = null;
+let portalMask: HTMLDivElement | null = null;
+let portalTimeline: gsap.core.Timeline | null = null;
+let activeIndex = 0;
 
   type Beat = {
     title: string;
@@ -86,11 +88,49 @@
     left: 0,
     transform: 'translate(-50%, -50%)'
   });
+  const portalMaskClass = css({
+    position: 'fixed',
+    width: '48px',
+    height: '48px',
+    borderRadius: '999px',
+    borderWidth: '1px',
+    borderColor: 'accent',
+    opacity: 0,
+    pointerEvents: 'none',
+    mixBlendMode: 'screen',
+    zIndex: 12,
+    transform: 'translate(-50%, -50%)',
+    backgroundColor: 'rgba(15, 23, 26, 0.5)'
+  });
 
   const orchestrator =
     getContext<ScrollOrchestrator | undefined>(SCROLL_ORCHESTRATOR_CONTEXT_KEY);
   let timeline: gsap.core.Timeline | null = null;
   let timelineDisposer: (() => void) | null = null;
+
+  export function receivePortalIntro(detail?: { focusRect?: DOMRect }) {
+    if (!portalMask) return;
+    portalTimeline?.kill();
+    const fallbackRect = new DOMRect(window.innerWidth / 2, window.innerHeight * 0.6, 40, 40);
+    const startRect = detail?.focusRect ?? fallbackRect;
+    const targetRect = content[0]?.ref?.getBoundingClientRect() ?? startRect;
+    const start = {
+      x: startRect.left + startRect.width / 2,
+      y: startRect.top + startRect.height / 2
+    };
+    const target = {
+      x: targetRect.left + targetRect.width / 2,
+      y: targetRect.top + targetRect.height / 2
+    };
+
+    portalTimeline = gsap.timeline({ defaults: { ease: brandEase } });
+    portalTimeline
+      .set(portalMask, { opacity: 1, width: 48, height: 48, left: start.x, top: start.y })
+      .to(portalMask, { left: target.x, top: target.y, duration: 0.4 })
+      .to(portalMask, { width: targetRect.width * 1.5, height: targetRect.width * 1.5, duration: 0.45 }, '>-0.2')
+      .to(portalMask, { width: '130vw', height: '130vw', duration: 0.5 }, '>-0.1')
+      .to(portalMask, { opacity: 0, duration: 0.3 }, '>-0.15');
+  }
 
   function moveRing(target: HTMLElement | null, immediate = false) {
     if (!target || !focusRing) return;
@@ -180,6 +220,8 @@
     timeline = null;
     timelineDisposer?.();
     timelineDisposer = null;
+    portalTimeline?.kill();
+    portalTimeline = null;
   });
 </script>
 
@@ -203,4 +245,5 @@
   <div class={indicatorWrap}>
     <StepIndicator steps={aboutSteps} activeIndex={activeIndex} />
   </div>
+  <div class={portalMaskClass} bind:this={portalMask} aria-hidden="true"></div>
 </section>

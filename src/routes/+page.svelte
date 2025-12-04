@@ -13,14 +13,29 @@
 
   let filmPortalReady = false;
   type FilmStoriesInstance = InstanceType<typeof FilmStoriesSection>;
+  type AboutInstance = InstanceType<typeof AboutSection>;
+  type FinalContactInstance = InstanceType<typeof FinalContactSection>;
   let filmStoriesRef: FilmStoriesInstance | null = null;
+  let aboutRef: AboutInstance | null = null;
+  let finalContactRef: FinalContactInstance | null = null;
 
   function handleFilmPortal() {
+    console.debug('[framework2] film portal ready event received');
     filmPortalReady = true;
   }
 
   function handleFilmExit(event: CustomEvent<{ focusRect: DOMRect }>) {
     filmStoriesRef?.receivePortalIntro(event.detail);
+  }
+
+  $: console.debug('[framework2] enabled', $framework2Enabled);
+
+  function handleStatsExit(event: CustomEvent<{ focusRect: DOMRect }>) {
+    aboutRef?.receivePortalIntro(event.detail);
+  }
+
+  function handleServicesExit(event: CustomEvent<{ focusRect: DOMRect }>) {
+    finalContactRef?.receivePortalIntro(event.detail);
   }
 
   const gateMessage = css({
@@ -40,10 +55,10 @@
   {#if $framework2Enabled}
     <BigFilmSection filmPortalReady={filmPortalReady} on:film:exit={handleFilmExit} />
     <FilmStoriesSection bind:this={filmStoriesRef} />
-    <PhotoStatsSection />
-    <AboutSection />
-    <ServicesSection />
-    <FinalContactSection />
+    <PhotoStatsSection on:stats:exit={handleStatsExit} />
+    <AboutSection bind:this={aboutRef} />
+    <ServicesSection on:services:exit={handleServicesExit} />
+    <FinalContactSection bind:this={finalContactRef} />
   {:else}
     <p class={gateMessage}>
       Framework 2 content disabled — append ?framework2=1 to preview upcoming scenes.

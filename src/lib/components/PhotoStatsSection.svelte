@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { getContext, onDestroy, onMount, tick } from 'svelte';
+  import { createEventDispatcher, getContext, onDestroy, onMount, tick } from 'svelte';
   import { css, cx } from '$styled-system/css';
   import { heading, body } from '$styled-system/recipes';
   import { layout } from '$design/system';
@@ -11,8 +11,10 @@ import { gsap, brandEase, SCROLL_ORCHESTRATOR_CONTEXT_KEY, type ScrollOrchestrat
   let root: HTMLElement;
   let successBlock: HTMLElement;
   let failBlock: HTMLElement;
-let focusRing: HTMLDivElement | null = null;
-let activeIndex = 0;
+  let focusRing: HTMLDivElement | null = null;
+  let portalMask: HTMLDivElement | null = null;
+  let activeIndex = 0;
+  const dispatch = createEventDispatcher<{ 'stats:exit': { focusRect: DOMRect } }>();
 
   const sectionClass = css({
     position: 'relative',
@@ -81,6 +83,20 @@ let activeIndex = 0;
     transform: 'translate(-50%, -50%)'
   });
   const steps = ['Summits', 'Setbacks'];
+  const portalMaskClass = css({
+    position: 'fixed',
+    width: '48px',
+    height: '48px',
+    borderRadius: '999px',
+    borderWidth: '1px',
+    borderColor: 'accent',
+    opacity: 0,
+    pointerEvents: 'none',
+    mixBlendMode: 'screen',
+    zIndex: 14,
+    transform: 'translate(-50%, -50%)',
+    backgroundColor: 'rgba(15, 23, 26, 0.5)'
+  });
 
 const orchestrator =
   getContext<ScrollOrchestrator | undefined>(SCROLL_ORCHESTRATOR_CONTEXT_KEY);
@@ -156,7 +172,23 @@ function moveRing(target: HTMLElement | null, immediate = false) {
         .call(() => {
           activeIndex = 1;
           moveRing(failBlock);
-        }, undefined, 0.75);
+          const rect = failBlock?.getBoundingClientRect();
+          if (rect && portalMask) {
+            const x = rect.left + rect.width * 0.7;
+            const y = rect.top + rect.height * 0.3;
+            gsap.set(portalMask, { left: x, top: y, width: 32, height: 32, opacity: 1 });
+            gsap.to(portalMask, {
+              width: rect.width * 1.6,
+              height: rect.width * 1.6,
+              duration: 0.5,
+              ease: brandEase,
+              onComplete: () => {
+                portalMask && gsap.set(portalMask, { opacity: 0 });
+                dispatch('stats:exit', { focusRect: rect });
+              }
+            });
+          }
+        }, undefined, 0.95);
 
       timeline = tl;
       if (orchestrator) {
@@ -202,4 +234,6 @@ function moveRing(target: HTMLElement | null, immediate = false) {
       <StepIndicator steps={steps} activeIndex={activeIndex} />
     </div>
   </div>
+
+  <div class={portalMaskClass} bind:this={portalMask} aria-hidden="true"></div>
 </section>

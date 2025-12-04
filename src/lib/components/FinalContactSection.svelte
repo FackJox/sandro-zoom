@@ -10,6 +10,8 @@
   let root: HTMLElement;
   let contactBlock: HTMLElement;
   let screenMesh: Mesh | undefined;
+  let portalMask: HTMLDivElement | null = null;
+  let portalTimeline: gsap.core.Timeline | null = null;
 
   const sectionClass = css({
     position: 'relative',
@@ -28,11 +30,49 @@
   });
   const headingClass = heading({ size: 'md' });
   const bodyClass = cx(body({ tone: 'standard' }), css({ mt: '0.75rem' }));
+  const portalMaskClass = css({
+    position: 'fixed',
+    width: '50px',
+    height: '50px',
+    borderRadius: '999px',
+    borderWidth: '1px',
+    borderColor: 'accent',
+    opacity: 0,
+    pointerEvents: 'none',
+    mixBlendMode: 'screen',
+    zIndex: 20,
+    transform: 'translate(-50%, -50%)'
+  });
 
   const orchestrator =
     getContext<ScrollOrchestrator | undefined>(SCROLL_ORCHESTRATOR_CONTEXT_KEY);
   let timeline: gsap.core.Timeline | null = null;
   let timelineDisposer: (() => void) | null = null;
+
+  export function receivePortalIntro(detail?: { focusRect?: DOMRect }) {
+    if (!portalMask) return;
+    portalTimeline?.kill();
+    const fallbackRect = contactBlock?.getBoundingClientRect();
+    if (!fallbackRect) return;
+    const startRect = detail?.focusRect ?? fallbackRect;
+    const start = {
+      x: startRect.left + startRect.width / 2,
+      y: startRect.top + startRect.height / 2
+    };
+    const targetRect = fallbackRect;
+    const target = {
+      x: targetRect.left + targetRect.width / 2,
+      y: targetRect.top + targetRect.height / 2
+    };
+
+    portalTimeline = gsap.timeline({ defaults: { ease: brandEase } });
+    portalTimeline
+      .set(portalMask, { opacity: 1, width: 40, height: 40, left: start.x, top: start.y })
+      .to(portalMask, { left: target.x, top: target.y, duration: 0.45 })
+      .to(portalMask, { width: targetRect.width * 1.4, height: targetRect.width * 1.4, duration: 0.4 }, '>-0.2')
+      .to(portalMask, { width: '160vw', height: '160vw', duration: 0.6 }, '>-0.1')
+      .to(portalMask, { opacity: 0, duration: 0.3 }, '>-0.15');
+  }
 
   onMount(async () => {
     await tick();
@@ -83,6 +123,8 @@
     timeline = null;
     timelineDisposer?.();
     timelineDisposer = null;
+    portalTimeline?.kill();
+    portalTimeline = null;
   });
 </script>
 
@@ -104,4 +146,6 @@
     <p class={bodyClass}>+44 7880 352909</p>
     <p class={bodyClass}>sandro.gromen-hayes@live.com</p>
   </div>
+
+  <div class={portalMaskClass} bind:this={portalMask} aria-hidden="true"></div>
 </section>

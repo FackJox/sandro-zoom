@@ -8,6 +8,7 @@
   import StepIndicator from './StepIndicator.svelte';
   import LensBug from './LensBug.svelte';
   import { getVideoSources } from '$lib/utils/video';
+  import { filmStories } from '$lib/data/film-stories';
 
   type StoryCard = {
     title: string;
@@ -16,11 +17,7 @@
     mediaRef: HTMLElement | null;
   };
 
-  const stories: StoryCard[] = [
-    { title: 'Sasha / No Days Off', src: '/videos/short-film-harbor.mp4', ref: null, mediaRef: null },
-    { title: 'Grace / Mental Health', src: '/videos/brand-film-x.mp4', ref: null, mediaRef: null },
-    { title: 'Afghanistan / Charles Schwab', src: '/videos/documentary-sierra.mp4', ref: null, mediaRef: null }
-  ];
+  const stories: StoryCard[] = filmStories.map((story) => ({ ...story, ref: null, mediaRef: null }));
 
   let root: HTMLElement;
   let viewport: HTMLElement;
