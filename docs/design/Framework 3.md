@@ -1,312 +1,335 @@
-Nice, this is the fun one. We’ll stay in the framework and do **Phase 3 for Section 3: Big Film Story (FILM)**, with:
+Nice, let’s keep the reel rolling 🎥
 
-- Mobile → desktop ASCII layouts
+We’re now in **Section 4: FILM STORIES (Sasha / Grace / Afghanistan)** and we’ll keep:
+
+- The **lens / circular camera language**
     
-- Entry transition from Logos → FILM using **lens / circular zoom**
+- The **portal zoom out → zoom in** scrollytelling
     
-- Internal scrollytelling (Card 1–3)
-    
-- Exit transition FILM → next FILM section, again with lens-style zoom out
+- **Mobile-first**, then expand to desktop using the _same_ structural idea
     
 
-I’ll keep calling out the pillars + notation (⚓, 🎭, 📦, ⚡).
+We’ll follow the framework: narrative → layout → motion → transitions.
 
 ---
 
-# Phase 3 – Section 3: Big Film Story (FILM)
+# Phase 3 – Section 4: Film Stories (Sasha / Grace / Noshaq)
 
-## 3.1 Narrative + Motion Intent
+## 3.1 Narrative & Motion Intent
 
-**Narrative goal:**  
-“This is the _big_ credit moment: Netflix 14 Peaks + K2. It should feel like dropping into the reel.”
+**Stories in this section:**
 
-**Emotion:**  
-Cinematic, serious, “this is where you realise he’s the real deal.”
+- Sasha / _No Days Off_ – Red Bull TV
+    
+- Grace – mental health, community
+    
+- Afghanistan / Charles Schwab – Noshaq commercial
+    
+
+**Narrative goal:**
+
+- Move from **famous + spectacular** (Netflix/K2) into **human, intimate, gritty**.
+    
+- Still cinematic, but closer, more emotional.
+    
 
 **Motion level:**  
-**Level 3 (signature)** – this is one of the main set pieces.
+**Level 2.5** – still strong, but slightly calmer than the Netflix block.
 
 **Camera metaphor:**
 
-- Logos → FILM: **lens zooms into a Netflix frame**.
+- Coming off the “big reel” of Netflix/K2, we **zoom back in** on three “character stories.”
     
-- Inside FILM: each card feels like a **shot on a timeline**.
-    
-- FILM → next FILM section: **lens zooms back out**, showing cards as frames in a strip, then dives into next set.
+- Each feels like a **shot on a separate track**: we pan/zoom laterally along a strip of faces/places.
     
 
 ---
 
-## 3.2 Entry Transition – Logos → FILM (lens zoom)
+## 3.2 Entry Transition – From FILM (14 Peaks/K2) into Film Stories
 
-Starting point: we ended Section 2 with the logos strip centered; Netflix logo is somewhere on that strip; our small ◯ “lens bug” exists in the corner.
+We already zoomed out from FILM into a horizontal **frame strip**. Now we:
 
-### Lens-style portal
+1. **See the wider reel:**
+    
+    - The 14 Peaks / K2 / K2 Summit frames are on the left side of a horizontal strip.
+        
+    - On the right side of the strip, we see 3 more frames: **Sasha, Grace, Afghanistan** thumbnails.
+        
+2. **Lens focus pull:**
+    
+    - A **circular focus ring** (Egg Toast outline) slides along the strip from the K2 frame to the **Sasha frame**.
+        
+    - As it moves:
+        
+        - The frame under the ring is sharp; everything else is slightly blurred (Masking + Blur).
+            
+    - When the circle rests on Sasha:
+        
+        - The ring **tightens** and we zoom into that circle until it fills the screen → Section 4, Card 1.
+            
+3. **Landing in Film Stories:**
+    
+    - The circle expands to full viewport; edges snap to rectangle (like before).
+        
+    - The Sasha layout appears.
+        
 
-**On scroll past the logo band:**
-
-1. **Circle iris appears over Netflix logo**
-    
-    - A circular mask (EGG TOAST ring) grows around the Netflix logo.
-        
-    - The rest of the logos strip fades slightly.
-        
-2. **Lens zoom in**
-    
-    - The circle **expands** to fill the screen (`Zoom + Masking`).
-        
-    - Inside the circle, we crossfade from **Netflix logo** → **14 Peaks still / video frame**.
-        
-    - Thin **ring UI** (like lens barrel) appears around edge: small tick marks, “14 PEAKS / NETFLIX” text.
-        
-3. **Landing in FILM**
-    
-    - Circle stops expanding once it fills viewport; edges square off quickly (iris opens → full sensor).
-        
-    - The FILM layout we’re about to define comes into view.
-        
-
-Pillars: **Zoom, Masking, Transform, Fade**, `brand-enter` easing.
-
-Notation:
-
-- ⚡ On Scroll (end of logos).
-    
-- ⚓ circle mask + Netflix element.
-    
-- 🎭 circle growth arrows.
-    
-- 📦 FG: lens ring, MG: 14 Peaks frame, BG: old logos band fading.
-    
+Pillars: **Zoom, Masking, Transform, Fade**, plus a bit of **Dimension (focus depth)**.
 
 ---
 
-## 3.3 FILM Layout – Mobile
+## 3.3 Layout – Mobile (Sasha / Grace / Afghanistan)
 
-We’ll treat this section as a **pinned scrollytelling sequence** of 3 cards.
+Each story is a **scroll step**: one view per screen, with emphasis on **video**.
 
 ```text
 ================================================
-|  LABEL ROW                                   |
-|  FILM  —  HIGH ALTITUDE FEATURES            |
-|  (Trade Gothic, Egg Toast, thin frame line) |
+| LABEL ROW                                    |
+|  FILM  —  FIELD STORIES                      |
+|  (Egg Toast, thin frame line)                |
 |----------------------------------------------|
-|  CARD VIEWPORT (pinned) ⚓                   |
+|  STORY 1 – SASHA ⚓                           |
 |  +----------------------------------------+  |
-|  | [ CARD 1 - NETFLIX 14 PEAKS ]         |  |
-|  | [16:9 VIDEO THUMB / YT EMBED]         |  |
-|  |                                        | |
-|  |  14 PEAKS: NOTHING IS IMPOSSIBLE       | |
-|  |  I worked as lead cinematographer      | |
-|  |  ... K2 drama etc.                    |  |
+|  | [VIDEO: NO DAYS OFF]                  |  |
+|  | (16:9, YouTube embed / clip)          |  |
+|  +----------------------------------------+  |
+|  | TITLE: SASHA / NO DAYS OFF            |  |
+|  | BODY: In 2022 I filmed episode 1...   |  |
 |  +----------------------------------------+  |
 |                                              |
-|  [ SCROLL PROGRESS INDICATOR ]              |
-|   • Card 1   ○ Card 2   ○ Card 3            |
+|  [SCRUB / PROGRESS]                          |
+|   ● Sasha   ○ Grace   ○ Afghanistan          |
 |                                              |
-|  (Small ◯ lens bug in top-right corner)     |
+|  ◯ small lens bug in top-right corner       |
+================================================
+(Scroll → Grace)
+================================================
+| FILM  —  FIELD STORIES                      |
+|----------------------------------------------|
+|  STORY 2 – GRACE ⚓                          |
+|  +----------------------------------------+  |
+|  | [VIDEO: STORY OF GRACE]                |  |
+|  +----------------------------------------+  |
+|  | GRACE / MENTAL HEALTH                  |  |
+|  | I directed, shot and edited...         |  |
+|  +----------------------------------------+  |
+|  [● ○ ○ indicators updated]                 |
+|  ◯ lens bug                                 |
+================================================
+(Scroll → Afghanistan)
+================================================
+| FILM  —  FIELD STORIES                      |
+|----------------------------------------------|
+|  STORY 3 – AFGHANISTAN ⚓                    |
+|  +----------------------------------------+  |
+|  | [VIDEO: CHARLES SCHWAB AFGHANISTAN]    |  |
+|  +----------------------------------------+  |
+|  | AFGHANISTAN / CHARLES SCHWAB           |  |
+|  | Filmed during one of six trips...      |  |
+|  +----------------------------------------+  |
+|  [● ● ● or bar at 100%]                    |
+|  ◯ lens bug                                 |
 ================================================
 ```
 
-**Scroll behaviour (mobile):**
-
-- Section is **pinned**; as you scroll, we **swap cards** 1→2→3 (like slides).
-    
-- Card 1: Netflix 14 Peaks trailer (or looping clip).
-    
-- Card 2: K2 Winter Expedition (video).
-    
-- Card 3: K2 Summit still (photographic anchor).
-    
-
-Each card is essentially:
-
-```text
-+----------------------------------------+
-| [VIDEO / STILL]                        |
-|----------------------------------------|
-| TITLE (Trade Gothic)                   |
-| BODY COPY (IBM Plex Sans)             |
-+----------------------------------------+
-```
-
-The little ◯ lens bug sits top-right, small and subdued.
+Each “card” fully occupies the viewport; user scrolls to move 1 → 2 → 3.
 
 ---
 
-## 3.4 FILM Layout – Desktop
+## 3.4 Layout – Desktop
 
-Desktop is the **same basic idea**, expanded horizontally (no new design language).
+Same structure, more horizontal air; video still primary.
 
 ```text
 ================================================================================
-|  TOP ROW                                                                     |
-|  FILM  —  HIGH ALTITUDE FEATURES                 ◯ (small lens bug)         |
+|  TOP ROW: LABEL + MICRO NAV + LENS BUG                                      |
+|  FILM  —  FIELD STORIES                          ◯ (small lens bug)         |
 |  ------------------------------------------------------------------------    |
 |                                                                              |
 |  +-----------------------------------------------------------+  +---------+ |
-|  | [CARD VIDEO/STILL ⚓ ]                                    |  |         | |
-|  |  - 14 Peaks trailer (YouTube)                            |  |  CARD   | |
-|  |  - 16:9, framed with thin Egg Toast outline              |  |  STEPS  | |
-|  +-----------------------------------------------------------+  |         | |
-|                                                                |  1 ■     | |
-|                                                                |  2 □     | |
-|                                                                |  3 □     | |
+|  | [VIDEO PLAYER ⚓]                                         |  | STORY   | |
+|  |  - No Days Off / Grace / Afghanistan videos              |  | INFO    | |
+|  |  - 16:9 with Egg Toast frame line                        |  |         | |
+|  +-----------------------------------------------------------+  | TITLE   | |
+|                                                                | -------- | |
+|                                                                | Body     | |
+|                                                                | text     | |
 |                                                                +---------+ |
 |                                                                              |
-|  [TITLE - Trade Gothic Condensed]                                             |
-|   NETFLIX — 14 PEAKS                                                          |
-|                                                                              |
-|  [BODY - IBM Plex Sans]                                                       |
-|   I worked as lead cinematographer on...                                     |
+|  [SCROLL / STEP INDICATOR]                                                   |
+|  ● Sasha      ○ Grace      ○ Afghanistan                                     |
 |                                                                              |
 ================================================================================
+(Then same layout for Grace, then Afghanistan, as user scrolls)
 ```
 
-Variation: on desktop you might place the **card step indicator** (1/2/3) and a short annotation block on the side; the video stays primary.
+Optional variation: on very wide screens, you can hint at the **next** story by showing a **faint, blurred preview thumbnail** sliding in from right (but still subordinate to current video).
 
 ---
 
-## 3.5 In-section motion: cards as shots on a timeline
+## 3.5 In-section motion: scrollytelling as a lens pan between stories
 
-We want the whole thing to feel like **the camera lens zooms between shots**.
+We keep the **camera metaphor** but dial up **character & emotion**.
 
-### Scroll steps (mobile & desktop)
+### Scroll behaviour (mobile + desktop)
 
-As user scrolls:
+We pin the section (or move in discrete steps):
 
-1. **Card 1 → Card 2 (14 Peaks → K2 Winter)**
+- Scroll from 0 → 33% of section: **Sasha** in focus
     
-2. **Card 2 → Card 3 (K2 Winter → K2 Summit still)**
+- 33 → 66%: **Grace**
+    
+- 66 → 100%: **Afghanistan**
     
 
-For each step:
+### Transition pattern between stories
 
-#### A. Iris / lens zoom transition
+For each step (Sasha → Grace, Grace → Afghanistan):
 
-- We overlay a **circular mask** centered on the video frame:
+1. **Lens pan across a 3-frame strip**
     
-    - Circle shrinks slightly (`scale 1.0 → 0.8`) as if the lens is zooming out.
+    - Behind the current video, we imagine a **horizontal strip** of the 3 story frames.
         
-    - Inside, we briefly see a **wider framing** (out-zoom) of the current shot.
+    - As user crosses threshold:
         
-- At the **turnover point**:
-    
-    - Circle quickly **snaps open** into the next shot:
-        
-        - Quick crossfade from 14 Peaks → K2 video inside the circle.
+        - The current frame **shifts sideways** (like a dolly):
             
-    - Then the frame returns to full-rectangular view.
-        
-
-It’s like a micro “iris transition”, but tight and fast (220–260ms).
-
-#### B. Card body motion
-
-- Title and body text:
-    
-    - **Fade/slide up** (`Offset & Delay`) after the new video has landed.
-        
-    - Stagger: 50–80ms between lines.
-        
-- Step indicator:
-    
-    - “1 ■ 2 □ 3 □” → active step flips from 1 to 2 with a fast **mask wipe**.
-        
-
-#### C. Lens bug behaviour
-
-- The persistent ◯ bug:
-    
-    - During card transitions, it might do a subtle **rotation** or **tiny scale blip** (like a record light reacting).
-        
-    - But: low-key, desaturated, Level 1 motion—all attention remains on main card.
-        
-
-**Pillars in this section:**
-
-- Easing (our `brand-enter` curve)
-    
-- Transform & Zoom (card-level lens zoom)
-    
-- Masking (iris effect)
-    
-- Fade (headlines / body)
-    
-- Offset & Delay (copy & indicators)
-    
-
----
-
-## 3.6 Exit Transition – FILM → FILM STORIES (Sasha / Grace / Afghanistan)
-
-We want the zoom-out between sections to feel like a **lens zooming back** from this Netflix/K2 sequence into the wider reel of stories.
-
-### Step-by-step lens zoom out
-
-1. **Zoom out from the active card**
-    
-    - As user scrolls past the end of Card 3:
-        
-        - The whole Card 3 viewport **scales down** (0.9) into the center.
-            
-        - A **series of concentric circles** (like lens rings) appear as thin outlines around it in Egg Toast / Silverplate.
-            
-2. **Reveal the reel strip**
-    
-    - While still zooming out:
-        
-        - The three cards (14 Peaks / K2 / K2 Summit) **shrink into a horizontal strip** (like frames on a film strip) across the center.
-            
-        - You glimpse other frames starting to appear on the strip (Sasha, Grace, Afghanistan thumbs in grayscale).
-            
-3. **Dive into next story set**
-    
-    - Our camera / viewport then **pans + zooms into** the region of the strip where Sasha’s frame is:
-        
-        - That frame moves toward full-screen.
-            
-        - A circular mask briefly **highlights** it like a focus pull:
-            
-            - Outer area blurred, Sasha frame sharp.
+            - For Sasha → Grace: slide left
                 
-    - The strip fades away as we arrive in **Section 4: Film Stories** with Sasha as the new card 1.
+            - For Grace → Afghanistan: slide left again.
+                
+        - A **circular focus ring** appears centered on the upcoming story frame.
+            
+2. **Focus ring & zoom**
+    
+    - Focus ring (Egg Toast) zooms slightly in on the upcoming frame:
         
+        - Circle shrinks (zoom out), revealing more context inside.
+            
+        - Then the circle **lifts away** as the frame expands to full-rect view:
+            
+            - Just like a focus pull moving from face A → face B.
+                
+3. **UI + text**
+    
+    - Story label (“SASHA / NO DAYS OFF”) **crossfades** to the next story’s title.
+        
+    - Copy slides up with **Offset & Delay** and `brand-enter` curve.
+        
+    - The indicator on bottom:
+        
+        - Dot for Sasha → Grace → Afghanistan flips active with a **hard mask wipe**.
+            
 
-Visually: you zoom out to see the whole reel, then push back in on the next cluster.
+Pillars: **Transform, Zoom, Masking, Fade, Offset & Delay, Parallax** (slight parallax if we show the background basecamp / mountains behind video).
 
-Pillars: **Zoom, Transform, Masking, Parallax**, with concentric circles as explicit “lens UI”.
+### Lens circle behaviour in this section
+
+- ◯ lens bug is present but **very subdued**:
+    
+    - Same position across cards (top-right).
+        
+    - Footage inside: either:
+        
+        - Very slow loop of showreel, or
+            
+        - Static, slightly blurred still (like a viewfinder HUD).
+            
+    - Every time you cross a story boundary, it might:
+        
+        - Do a subtle 5–10° **rotation** or 1–2% **scale blip**, like a record light acknowledging a cut.
+            
+
+This keeps the lens motif alive without competing with the main videos.
+
+---
+
+## 3.6 Exit Transition – Film Stories → Photo + Climbing Cred
+
+Next section is **PHOTO** with successful vs unsuccessful climbs and basecamp drone background. The emotion shifts to **credibility + humility**.
+
+We want the **lens zoom out** to emphasise:  
+“You’ve seen the films. Now look at the stats.”
+
+### Step-by-step lens exit
+
+1. **Zoom out from last story (Afghanistan)**
+    
+    - As scroll passes last portion of Afghanistan card:
+        
+        - The entire video card **scales down** to center (~0.8).
+            
+        - A set of **concentric circles** appear around it, like aperture blades / lens rings.
+            
+        - The background darkens to Black Stallion with a hint of **basecamp drone footage** starting to appear.
+            
+2. **Turn stories into a strip**
+    
+    - Afghanistan, Grace, and Sasha frames **shrink into a vertical strip** on the left or right:
+        
+        - Think of them as three stacked tiles, tinted slightly, labelled FILM.
+            
+        - The strip drifts to one side (left) as we zoom out.
+            
+3. **Zoom into stats block**
+    
+    - On the opposite side, a block of text representing **SUCCESSFUL CLIMBS** starts as a small card.
+        
+    - The lens effect:
+        
+        - A circular focus ring moves from the story strip to the stats block.
+            
+        - As it rests over the stats:
+            
+            - The stats block scales up to fill viewport (Portal Zoom in).
+                
+            - The vertical film strip fades back, but doesn’t vanish instantly—lingers slightly like an afterimage.
+                
+4. **Landing in PHOTO section**
+    
+    - We arrive at a **full-viewport PHOTO section** with:
+        
+        - Basecamp drone video/still as BG.
+            
+        - `PHOTO — SUCCESSFUL CLIMBS` heading.
+            
+        - Vertical stats layout (we’ll define this next section).
+            
+
+Pillars: **Zoom, Transform, Masking, Dimension**, with **lens rings** as a clear motif.
 
 Notation for storyboard:
 
-- FILM Section Exit:
+- FILM Stories Exit:
     
-    - ⚓: active card viewport.
+    - ⚓: current video frame.
         
-    - 🎭: arrows showing scale down + horizontal collapse into strip.
+    - 🎭: arrows showing scale down and slide into vertical strip.
         
-    - Sketch concentric circles around shrinking cards.
+    - Concentric circle sketches around it.
         
-    - Circle pick-out on Sasha frame with “portal into Film Stories” note.
+    - Focus ring arrow from story strip → stats block.
         
 
 ---
 
-## Quick recap of lens integration so far
+## Quick recap of this section
 
-- **Hero → Logos:** metadata strip morph + lens circle drifting, portal zoom.
+- **Layout**: same stack pattern on all breakpoints (video primary, text below/side, progress dots).
     
-- **Logos → FILM:** circular mask over Netflix logo expanding to full-screen 14 Peaks frame.
+- **Transitions**:
     
-- **Within FILM:** card transitions use **quick circular iris zoom** between 14 Peaks / K2 / K2 Summit.
+    - From FILM: focus ring slides along strip to Sasha, then zooms into circle → first story.
+        
+    - Within section: horizontal “lens pan” with circular focus between Sasha → Grace → Afghanistan.
+        
+    - To PHOTO: zoom out, stories become a side strip, lens moves to stats, zoom in.
+        
+
+If you’re good with this, next we’ll run the framework over **Section 5: PHOTO + Climbing Cred** and define:
+
+- Mobile + desktop layouts for successful vs unsuccessful climbs
     
-- **FILM → Film Stories:** cards shrink into a reel; concentric circles appear (lens rings), then we zoom back in on the next story.
+- How basecamp drone video works as BG
     
-
-Everything tracks the idea:
-
-> “The whole scrollytelling experience feels like a camera lens zooming out and reframing, not just a static scrollbar.”
-
----
-
-If you’re happy with this FILM section, next we can run the same pattern on **Section 4: Film Stories (Sasha / Grace / Afghanistan)**—still lens-driven, but a bit more human and emotional in pacing.
+- The lens-based zoom out/in to About Me after stats.
