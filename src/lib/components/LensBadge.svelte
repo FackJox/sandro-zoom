@@ -8,15 +8,19 @@
   export let label: string | null = null;
   export let tone: 'solid' | 'ghost' = 'solid';
   export let ref: HTMLDivElement | null = null;
+  export let mediaRef: HTMLVideoElement | null = null;
   export let ariaLabel: HTMLAttributes<HTMLDivElement>['aria-label'] | undefined = undefined;
   export let mediaSrc: string | null = null;
+  export let mediaBlur: number = 0; // Blur amount in px for HUD effect
 
   let root: HTMLDivElement;
+  let videoEl: HTMLVideoElement;
   let computedAria = ariaLabel ?? label ?? undefined;
 
   $: computedAria = ariaLabel ?? label ?? undefined;
 
   $: ref = root;
+  $: mediaRef = videoEl;
 
   onDestroy(() => {
     ref = null;
@@ -82,7 +86,16 @@
   {...$$restProps}
 >
   {#if mediaSrc}
-    <video class={mediaClass} src={mediaSrc} autoplay muted loop playsinline></video>
+    <video
+      class={mediaClass}
+      bind:this={videoEl}
+      src={mediaSrc}
+      autoplay
+      muted
+      loop
+      playsinline
+      style={mediaBlur > 0 ? `filter: blur(${mediaBlur}px);` : ''}
+    ></video>
   {/if}
   <div class={cx('lens-slice', slice, sliceBg)} data-depth="bg" aria-hidden="true"></div>
   <div class={cx('lens-slice', slice, sliceFg)} data-depth="fg" aria-hidden="true"></div>

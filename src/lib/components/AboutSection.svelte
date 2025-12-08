@@ -1,80 +1,209 @@
 <script lang="ts">
-  import { getContext, onDestroy, onMount, tick } from 'svelte';
+  import { createEventDispatcher, getContext, onDestroy, onMount, tick } from 'svelte';
   import { css, cx } from '$styled-system/css';
   import { heading, body } from '$styled-system/recipes';
   import { layout } from '$design/system';
-  import { gsap, brandEase, SCROLL_ORCHESTRATOR_CONTEXT_KEY, type ScrollOrchestrator } from '$lib/motion';
+  import { SCROLL_ORCHESTRATOR_CONTEXT_KEY, type ScrollOrchestrator, gsap, masterScrollController } from '$lib/motion';
   import SectionLabel from './SectionLabel.svelte';
   import StepIndicator from './StepIndicator.svelte';
+  import { getVideoSources } from '$lib/utils/video';
+  import { aboutBeats, aboutSteps, valuesStaggerLines, servicesGhostLabels, type Beat } from '$lib/data/about-beats';
+  import {
+    initAboutTimeline,
+    moveRing,
+    type BeatRefs
+  } from '$lib/sections/AboutSection.motion';
+
+  // ─────────────────────────────────────────────────────────────────
+  // Types & Data
+  // ─────────────────────────────────────────────────────────────────
+
+  type BeatWithRefs = Beat & BeatRefs;
+
+  // Create content array with refs from imported data
+  const content: BeatWithRefs[] = aboutBeats.map(beat => ({
+    ...beat,
+    ref: null,
+    bgRef: null,
+    mediaRef: null,
+    textRef: null
+  }));
+
+  const dispatch = createEventDispatcher<{ 'about:exit': { focusRect: DOMRect } }>();
+
+  // ─────────────────────────────────────────────────────────────────
+  // Refs
+  // ─────────────────────────────────────────────────────────────────
 
   let root: HTMLElement;
-let focusRing: HTMLDivElement | null = null;
-let portalMask: HTMLDivElement | null = null;
-let portalTimeline: gsap.core.Timeline | null = null;
-let activeIndex = 0;
+  let focusRing: HTMLDivElement | null = null;
+  let activeIndex = 0;
 
-  type Beat = {
-    title: string;
-    body: string;
-    background: string;
-    ref: HTMLElement | null;
-  };
+  // Exit portal elements (kept for grid flip transition)
+  let exitFocusRing: HTMLDivElement | null = null;
+  let servicesGhostGrid: HTMLDivElement | null = null;
 
-  const content: Beat[] = [
-    {
-      title: 'Front-line perspective',
-      body: "Over the past decade I've documented Himalayan expeditions, heli rescues and expeditions where each shot is a calculated risk.",
-      background: '/pictures/heli rescue (1 of 2).jpg',
-      ref: null
-    },
-    {
-      title: 'Origin story',
-      body: 'A childhood in the city, a stint in the army, then a one way ticket to high altitude filmmaking. I learned to shoot in the thin air.',
-      background: '/pictures/city-of-glass.avif',
-      ref: null
-    },
-    {
-      title: 'Values & ongoing work',
-      body: "Feeling and fortitude. Whether it's a docu-series, a Red Bull campaign or an NGO rescue piece, craft comes second only to safety.",
-      background: '/pictures/Film Himal Sicker 01.jpg',
-      ref: null
-    }
-  ];
+  // Beat 3 staggered line refs (Framework 4 §5.3)
+  let valuesLine1: HTMLParagraphElement | null = null;
+  let valuesLine2: HTMLParagraphElement | null = null;
+
+  // Timeline state
+  let timelineCleanup: (() => void) | null = null;
+  let sectionCleanup: (() => void) | null = null;
+
+  const orchestrator = getContext<ScrollOrchestrator | undefined>(SCROLL_ORCHESTRATOR_CONTEXT_KEY);
+
+  // ─────────────────────────────────────────────────────────────────
+  // CSS Classes - Layout
+  // ─────────────────────────────────────────────────────────────────
 
   const sectionClass = css({
-    minHeight: '100vh',
-    position: 'relative',
-    color: 'text',
-    px: { base: layout.safeX.base, md: layout.safeX.md, lg: layout.safeX.lg },
-    py: { base: '4rem', md: '5rem' }
-  });
-  const beatClass = css({
     position: 'absolute',
-    top: { base: '6rem', md: '6rem' },
-    left: { base: '1.5rem', md: '3rem' },
-    right: { base: '1.5rem', md: '3rem' },
-    bottom: '2rem',
-    borderWidth: '1px',
-    borderColor: 'surface',
-    backgroundSize: 'cover',
-    backgroundPosition: 'center',
+    inset: 0,
+    color: 'text',
     overflow: 'hidden',
+    opacity: 0,
+    visibility: 'hidden',
+    // Zoom-out transition: starts full, contracts to center on exit
+    clipPath: 'circle(150% at 50% 50%)'
+  });
+
+  const headerRow = css({
+    position: 'relative',
+    zIndex: 2,
     display: 'flex',
-    alignItems: 'flex-end',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    px: { base: layout.safeX.base, md: layout.safeX.md, lg: layout.safeX.lg },
+    pt: { base: '1.5rem', md: '2rem' }
+  });
+
+  // Beat container - full viewport, stacked
+  const beatContainer = css({
+    position: 'absolute',
+    inset: 0,
     opacity: 0,
     clipPath: 'circle(0% at 50% 50%)'
   });
-  const overlayClass = css({
+
+  // Background layer for mobile (full-bleed)
+  const beatBgMobile = css({
     position: 'absolute',
     inset: 0,
-    background: 'linear-gradient(180deg, rgba(15, 23, 26, 0.1) 0%, rgba(15, 23, 26, 0.85) 100%)'
+    backgroundSize: 'cover',
+    backgroundPosition: 'center',
+    display: { base: 'block', lg: 'none' }
   });
-  const copyClass = css({ position: 'relative', zIndex: 1, p: '2rem' });
-  const headingClass = cx(heading({ size: 'md' }), css({ color: 'text' }));
-  const bodyClass = cx(body({ tone: 'standard' }), css({ mt: '1rem' }));
-  const aboutSteps = content.map((beat) => beat.title);
 
-  const indicatorWrap = css({ mt: '2rem' });
+  const bgOverlay = css({
+    position: 'absolute',
+    inset: 0,
+    background: 'linear-gradient(180deg, {colors.bg/15} 0%, {colors.bg/90} 70%)'
+  });
+
+  // Content grid (flex on mobile, grid on desktop)
+  const beatGrid = css({
+    position: 'relative',
+    zIndex: 1,
+    height: '100%',
+    display: 'flex',
+    flexDirection: 'column',
+    justifyContent: 'flex-end',
+    px: { base: layout.safeX.base, md: layout.safeX.md, lg: layout.safeX.lg },
+    pb: { base: '7rem', md: '6rem', lg: '4rem' },
+    pt: { base: '5rem', lg: '7rem' },
+    lg: {
+      display: 'grid',
+      gridTemplateColumns: '1fr 1fr',
+      gap: '3rem',
+      alignItems: 'center'
+    }
+  });
+
+  // Media column (desktop only)
+  const mediaColumn = css({
+    display: { base: 'none', lg: 'block' },
+    position: 'relative',
+    height: 'calc(100vh - 16rem)',
+    maxHeight: '600px',
+    borderRadius: '4px',
+    overflow: 'hidden',
+    '&::before': {
+      content: '""',
+      position: 'absolute',
+      left: 0,
+      top: 0,
+      bottom: 0,
+      width: '25%',
+      background: 'linear-gradient(90deg, {colors.bg/70} 0%, transparent 100%)',
+      zIndex: 1,
+      pointerEvents: 'none'
+    }
+  });
+
+  const mediaFill = css({
+    width: '100%',
+    height: '100%',
+    objectFit: 'cover'
+  });
+
+  // Text column
+  const textColumn = css({
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '1.25rem',
+    justifyContent: { lg: 'center' }
+  });
+
+  // Text panel card (visible card on mobile, transparent on desktop)
+  const beatPanel = css({
+    backgroundColor: { base: 'bg/90', lg: 'transparent' },
+    borderWidth: { base: '1px', lg: '0' },
+    borderColor: 'border',
+    borderRadius: '4px',
+    p: { base: '1.5rem', md: '2rem', lg: '0' },
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '1rem'
+  });
+
+  const headingClass = cx(heading({ size: 'md' }), css({ color: 'text', display: { base: 'block', lg: 'none' } }));
+  const bodyClass = cx(body({ tone: 'standard' }), css({ whiteSpace: 'pre-line' }));
+
+  // Beat 3 stagger line (slides up from below)
+  const staggerLineClass = css({
+    opacity: 0,
+    transform: 'translateY(30px)'
+  });
+
+  // Scroll hint (mobile only)
+  const scrollHint = css({
+    position: 'absolute',
+    bottom: '4.5rem',
+    left: '50%',
+    transform: 'translateX(-50%)',
+    fontFamily: 'plex',
+    fontSize: '0.7rem',
+    textTransform: 'uppercase',
+    letterSpacing: '0.15em',
+    color: 'muted',
+    display: { base: 'block', lg: 'none' },
+    zIndex: 2
+  });
+
+  // Indicator wrapper - pinned bottom center
+  const indicatorWrap = css({
+    position: 'absolute',
+    bottom: { base: '1.5rem', md: '2rem' },
+    left: '50%',
+    transform: 'translateX(-50%)',
+    zIndex: 3
+  });
+
+  // ─────────────────────────────────────────────────────────────────
+  // CSS Classes - Portal Elements
+  // ─────────────────────────────────────────────────────────────────
+
   const focusRingClass = css({
     position: 'absolute',
     width: '90px',
@@ -86,164 +215,185 @@ let activeIndex = 0;
     mixBlendMode: 'screen',
     top: 0,
     left: 0,
-    transform: 'translate(-50%, -50%)'
+    transform: 'translate(-50%, -50%)',
+    zIndex: 4
   });
-  const portalMaskClass = css({
-    position: 'fixed',
-    width: '48px',
-    height: '48px',
+
+  const exitRingClass = css({
+    position: 'absolute',
+    width: '100px',
+    height: '100px',
     borderRadius: '999px',
     borderWidth: '1px',
     borderColor: 'accent',
-    opacity: 0,
     pointerEvents: 'none',
     mixBlendMode: 'screen',
-    zIndex: 12,
+    top: '50%',
+    left: '50%',
     transform: 'translate(-50%, -50%)',
-    backgroundColor: 'rgba(15, 23, 26, 0.5)'
+    opacity: 0,
+    zIndex: 5
   });
 
-  const orchestrator =
-    getContext<ScrollOrchestrator | undefined>(SCROLL_ORCHESTRATOR_CONTEXT_KEY);
-  let timeline: gsap.core.Timeline | null = null;
-  let timelineDisposer: (() => void) | null = null;
+  const ghostGridClass = css({
+    position: 'absolute',
+    top: '50%',
+    left: '50%',
+    transform: 'translate(-50%, -50%)',
+    display: 'grid',
+    gridTemplateColumns: 'repeat(2, 1fr)',
+    gap: '1rem',
+    opacity: 0,
+    pointerEvents: 'none',
+    zIndex: 4
+  });
 
-  export function receivePortalIntro(detail?: { focusRect?: DOMRect }) {
-    if (!portalMask) return;
-    portalTimeline?.kill();
-    const fallbackRect = new DOMRect(window.innerWidth / 2, window.innerHeight * 0.6, 40, 40);
-    const startRect = detail?.focusRect ?? fallbackRect;
-    const targetRect = content[0]?.ref?.getBoundingClientRect() ?? startRect;
-    const start = {
-      x: startRect.left + startRect.width / 2,
-      y: startRect.top + startRect.height / 2
-    };
-    const target = {
-      x: targetRect.left + targetRect.width / 2,
-      y: targetRect.top + targetRect.height / 2
-    };
+  const ghostLabelClass = css({
+    fontFamily: 'trade',
+    fontSize: '0.75rem',
+    textTransform: 'uppercase',
+    letterSpacing: '0.15em',
+    color: 'muted',
+    padding: '0.75rem 1rem',
+    borderWidth: '1px',
+    borderColor: 'border',
+    borderRadius: '4px',
+    backgroundColor: 'bg/60',
+    whiteSpace: 'nowrap'
+  });
 
-    portalTimeline = gsap.timeline({ defaults: { ease: brandEase } });
-    portalTimeline
-      .set(portalMask, { opacity: 1, width: 48, height: 48, left: start.x, top: start.y })
-      .to(portalMask, { left: target.x, top: target.y, duration: 0.4 })
-      .to(portalMask, { width: targetRect.width * 1.5, height: targetRect.width * 1.5, duration: 0.45 }, '>-0.2')
-      .to(portalMask, { width: '130vw', height: '130vw', duration: 0.5 }, '>-0.1')
-      .to(portalMask, { opacity: 0, duration: 0.3 }, '>-0.15');
-  }
-
-  function moveRing(target: HTMLElement | null, immediate = false) {
-    if (!target || !focusRing) return;
-    const rect = target.getBoundingClientRect();
-    const rootRect = root?.getBoundingClientRect();
-    if (!rootRect) return;
-    const x = rect.left - rootRect.left + rect.width * 0.75;
-    const y = rect.top - rootRect.top + rect.height * 0.25;
-    gsap.to(focusRing, {
-      x,
-      y,
-      duration: immediate ? 0 : 0.4,
-      ease: brandEase
-    });
-  }
+  // ─────────────────────────────────────────────────────────────────
+  // Lifecycle
+  // ─────────────────────────────────────────────────────────────────
 
   onMount(async () => {
     await tick();
 
-    timeline?.kill();
-    timelineDisposer?.();
-    timelineDisposer = null;
+    timelineCleanup?.();
+    timelineCleanup = null;
 
-    const tl = gsap.timeline({
-      scrollTrigger: {
-        trigger: root,
-        start: 'top top',
-        end: '+=300%',
-        scrub: true,
-        pin: true
+    // Initialize timeline with extracted motion module
+    timelineCleanup = initAboutTimeline({
+      root,
+      beats: content.map(beat => ({
+        ref: beat.ref,
+        bgRef: beat.bgRef,
+        mediaRef: beat.mediaRef,
+        textRef: beat.textRef
+      })),
+      focusRing,
+      exitFocusRing,
+      servicesGhostGrid,
+      valuesLine1,
+      valuesLine2,
+      orchestrator,
+      onActiveIndexChange: (index) => {
+        activeIndex = index;
       },
-      defaults: { ease: brandEase }
-    });
-
-    content.forEach((beat, index) => {
-      const node = beat.ref;
-      if (!node) return;
-      gsap.set(node, {
-        autoAlpha: index === 0 ? 1 : 0,
-        clipPath: index === 0 ? 'circle(140% at 50% 50%)' : 'circle(0% at 50% 50%)'
-      });
-    });
-    activeIndex = 0;
-    moveRing(content[0]?.ref ?? null, true);
-
-    content.forEach((_, i) => {
-      const beat = content[i]?.ref;
-      const next = content[i + 1]?.ref;
-
-      if (beat && next) {
-        const t = (i + 0.9) / content.length;
-        tl
-          .to(
-            beat,
-            {
-              clipPath: 'circle(0% at 50% 50%)',
-              autoAlpha: 0,
-              duration: 0.35
-            },
-            t
-          )
-          .fromTo(
-            next,
-            { clipPath: 'circle(0% at 50% 50%)', autoAlpha: 0 },
-            { clipPath: 'circle(140% at 50% 50%)', autoAlpha: 1, duration: 0.4 },
-            t + 0.05
-          )
-          .call(
-            (idx: number) => {
-              activeIndex = idx;
-              moveRing(content[idx]?.ref ?? null);
-            },
-            [i + 1],
-            t + 0.08
-          );
+      onExitDispatch: (focusRect) => {
+        dispatch('about:exit', { focusRect });
       }
     });
 
-    timeline = tl;
-    if (orchestrator) {
-      timelineDisposer = orchestrator.registerSectionTimeline('about', () => tl);
-    }
+    // Register section and parallax targets for zoom-out transitions
+    const beatRefs = content.map(b => b.ref).filter(Boolean) as HTMLElement[];
+    const textRefs = content.map(b => b.textRef).filter(Boolean) as HTMLElement[];
+    const unregisterSection = masterScrollController.registerSection('about', root);
+    const unregisterParallax = masterScrollController.registerParallaxTargets('about', [
+      ...beatRefs,
+      ...textRefs,
+      focusRing
+    ].filter(Boolean) as HTMLElement[]);
+
+    sectionCleanup = () => {
+      unregisterSection();
+      unregisterParallax();
+    };
   });
 
   onDestroy(() => {
-    timeline?.kill();
-    timeline = null;
-    timelineDisposer?.();
-    timelineDisposer = null;
-    portalTimeline?.kill();
-    portalTimeline = null;
+    timelineCleanup?.();
+    timelineCleanup = null;
+    sectionCleanup?.();
+    sectionCleanup = null;
   });
 </script>
 
 <section bind:this={root} class={sectionClass} id="about">
-  <SectionLabel prefix="About me" title="Story" />
+  <!-- Header row -->
+  <header class={headerRow}>
+    <SectionLabel prefix="About me" title={content[activeIndex]?.title ?? 'Story'} />
+  </header>
 
-  {#each content as beat}
-    <article
-      class={beatClass}
-      style={`background-image:url('${beat.background}');`}
-      bind:this={beat.ref}
-    >
-      <div class={overlayClass}></div>
-      <div class={copyClass}>
-        <h2 class={headingClass}>{beat.title}</h2>
-        <p class={bodyClass}>{beat.body}</p>
+  <!-- Beat panels -->
+  {#each content as beat, index}
+    <article class={beatContainer} bind:this={beat.ref}>
+      <!-- Mobile: Full-bleed background -->
+      <div
+        class={beatBgMobile}
+        style={`background-image: url('${beat.background.mobile}')`}
+        bind:this={beat.bgRef}
+      >
+        <div class={bgOverlay}></div>
+      </div>
+
+      <!-- Content grid (responsive) -->
+      <div class={beatGrid}>
+        <!-- Left: Media column (desktop only) -->
+        <div class={mediaColumn}>
+          {#if beat.background.video}
+            <video class={mediaFill} bind:this={beat.mediaRef} autoplay muted loop playsinline>
+              {#each getVideoSources(beat.background.video) as source}
+                <source src={source.src} type={source.type} />
+              {/each}
+            </video>
+          {:else}
+            <img
+              class={mediaFill}
+              bind:this={beat.mediaRef}
+              src={beat.background.desktop || beat.background.mobile}
+              alt=""
+              loading="lazy"
+            />
+          {/if}
+        </div>
+
+        <!-- Right: Text column -->
+        <div class={textColumn}>
+          <div class={beatPanel} bind:this={beat.textRef}>
+            <h2 class={headingClass}>{beat.title}</h2>
+            {#if index === 2}
+              <!-- Beat 3: Special staggered animation (Framework 4 §5.3) -->
+              <p class={bodyClass}>{beat.body[0]}</p>
+              <p class={bodyClass} bind:this={valuesLine1}>{valuesStaggerLines.line1}</p>
+              <p class={cx(bodyClass, staggerLineClass)} bind:this={valuesLine2}>{valuesStaggerLines.line2}</p>
+            {:else}
+              {#each beat.body as paragraph}
+                <p class={bodyClass}>{paragraph}</p>
+              {/each}
+            {/if}
+          </div>
+        </div>
       </div>
     </article>
   {/each}
-  <div class={focusRingClass} bind:this={focusRing} aria-hidden="true"></div>
+
+  <!-- Scroll hint (mobile) -->
+  <div class={scrollHint}>Next story</div>
+
+  <!-- Step indicator -->
   <div class={indicatorWrap}>
-    <StepIndicator steps={aboutSteps} activeIndex={activeIndex} />
+    <StepIndicator steps={aboutSteps} {activeIndex} />
   </div>
-  <div class={portalMaskClass} bind:this={portalMask} aria-hidden="true"></div>
+
+  <!-- Focus ring -->
+  <div class={focusRingClass} bind:this={focusRing} aria-hidden="true"></div>
+
+  <!-- Exit portal elements (for grid flip transition to Services) -->
+  <div class={exitRingClass} bind:this={exitFocusRing} aria-hidden="true"></div>
+  <div class={ghostGridClass} bind:this={servicesGhostGrid}>
+    {#each servicesGhostLabels as label}
+      <span class={ghostLabelClass}>{label}</span>
+    {/each}
+  </div>
 </section>

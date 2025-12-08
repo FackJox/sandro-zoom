@@ -24,6 +24,7 @@
   } from '$lib/motion';
   import { initHeroTimelines } from './HeroSection.motion';
   import { getVideoSources } from '$lib/utils/video';
+  import { heroCopy } from '$lib/data/hero';
 
   const heroVideoSrc = '/videos/showreel.mp4';
   const heroVideoSources = getVideoSources(heroVideoSrc);
@@ -33,6 +34,7 @@
   let slab: HTMLElement;
   let lensHome: HTMLDivElement;
   let lensMotion: HTMLDivElement;
+  let lensMedia: HTMLVideoElement | null = null;
   let metadataDock: HTMLDivElement | null = null;
   let metadata: HTMLDivElement;
   let titleEl: HTMLElement;
@@ -55,7 +57,7 @@ let disposed = false;
   $: lensSnapshot = $lensStore;
 
   $: lensY = lensSnapshot.yPercent + lensSnapshot.idleOffset;
-  $: hoverScale = lensHover && allowHover && !reduceMotion ? 1.02 : 1;
+  $: hoverScale = lensHover && allowHover && !reduceMotion ? 1.04 : 1;
   $: lensTransform = `translate3d(${lensSnapshot.xPercent}%, ${lensY}%, 0) scale(${lensSnapshot.scale * hoverScale})`;
   $: lensOpacity = lensSnapshot.opacity;
 
@@ -84,6 +86,7 @@ onMount(() => {
       media: bgVideo,
       slab,
       lens: lensMotion,
+      lensMedia,
       metadata,
       halo,
       strips,
@@ -123,8 +126,8 @@ onDestroy(() => {
   }
 
   const hero = css({
-    position: 'relative',
-    minHeight: '100vh',
+    position: 'absolute',
+    inset: 0,
     overflow: 'hidden',
     background: 'blackStallion',
     color: 'silverplate'
@@ -273,24 +276,21 @@ onDestroy(() => {
           on:mouseleave={handleLensLeave}
         >
           <div class={haloClass} bind:this={halo}></div>
-          <LensBadge mediaSrc={heroVideoSrc} label="ALT ▲ 8,000m" />
+          <LensBadge mediaSrc={heroVideoSrc} label={heroCopy.lensLabel} bind:mediaRef={lensMedia} />
         </div>
       </div>
 
-      <h1 class={title} bind:this={titleEl}>sandrogh</h1>
-      <p class={subtitle} bind:this={subtitleEl}>High Altitude &amp; Hostile Environment</p>
-      <p class={body} bind:this={bodyEl}>
-        Over the past decade I've documented some of the biggest stories from the world of high altitude
-        mountaineering.
-      </p>
-      <p class={slabFooter} bind:this={footerEl}>Field Notes — 2014 → 2024</p>
+      <h1 class={title} bind:this={titleEl}>{heroCopy.title}</h1>
+      <p class={subtitle} bind:this={subtitleEl}>{heroCopy.subtitle}</p>
+      <p class={body} bind:this={bodyEl}>{heroCopy.body}</p>
+      <p class={slabFooter} bind:this={footerEl}>{heroCopy.footer}</p>
     </article>
 
     <div class={metadataDockClass} bind:this={metadataDock}>
       <MetadataStrip bind:ref={metadata} text={$metadataText} />
     </div>
 
-    <p class={scrollHint}>Scroll</p>
+    <p class={scrollHint}>{heroCopy.scrollHint}</p>
   </div>
 
   <div class={stripField} aria-hidden="true">

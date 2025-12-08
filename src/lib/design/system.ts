@@ -1,14 +1,23 @@
 export const layout = {
   safeX: {
-    base: '1.25rem',
-    md: '2.5rem',
-    lg: '6rem'
+    base: '2rem',       // 32px - Brand Design System minimum
+    md: '2.5rem',       // 40px
+    lg: '6rem'          // 96px - meets Brand Design System requirement
   },
   sectionY: {
     base: '4rem',
     lg: '7rem'
   },
-  slabMax: '32rem'
+  slabMax: '32rem',
+  /** 12-column grid system per Brand Design System */
+  grid: {
+    columns: 12,
+    gap: {
+      base: '1rem',
+      md: '1.5rem',
+      lg: '2rem'
+    }
+  }
 };
 
 export const motion = {

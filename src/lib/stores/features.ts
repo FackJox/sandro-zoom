@@ -13,7 +13,9 @@ let listenersBound = false;
 if (browser && !listenersBound) {
   listenersBound = true;
   const updateFromLocation = () => {
-    framework2Store.set(readFramework2Flag());
+    const next = readFramework2Flag();
+    console.debug('[features] framework2 flag updated from location', next);
+    framework2Store.set(next);
   };
 
   updateFromLocation();
@@ -26,5 +28,6 @@ export const framework2Enabled = {
 };
 
 export function setFramework2Enabled(value: boolean) {
+  console.debug('[features] framework2 flag manually set', value);
   framework2Store.set(value);
 }

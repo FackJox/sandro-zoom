@@ -1,5 +1,4 @@
 <script lang="ts">
-  import { css } from '$styled-system/css';
   import HeroSection from '$lib/sections/HeroSection.svelte';
   import LogosSection from '$lib/sections/LogosSection.svelte';
   import BigFilmSection from '$lib/components/BigFilmSection.svelte';
@@ -9,59 +8,48 @@
   import ServicesSection from '$lib/components/ServicesSection.svelte';
   import FinalContactSection from '$lib/components/FinalContactSection.svelte';
   import MainScroll from '$lib/components/MainScroll.svelte';
-  import { framework2Enabled } from '$lib/stores/features';
+  import PortalOverlay from '$lib/components/PortalOverlay.svelte';
+  import GridFlipOverlay from '$lib/components/GridFlipOverlay.svelte';
 
+  // Logos → BigFilm: Netflix expand (kept)
   let filmPortalReady = false;
-  type FilmStoriesInstance = InstanceType<typeof FilmStoriesSection>;
-  type AboutInstance = InstanceType<typeof AboutSection>;
-  type FinalContactInstance = InstanceType<typeof FinalContactSection>;
-  let filmStoriesRef: FilmStoriesInstance | null = null;
-  let aboutRef: AboutInstance | null = null;
-  let finalContactRef: FinalContactInstance | null = null;
-
   function handleFilmPortal() {
-    console.debug('[framework2] film portal ready event received');
     filmPortalReady = true;
   }
 
-  function handleFilmExit(event: CustomEvent<{ focusRect: DOMRect }>) {
-    filmStoriesRef?.receivePortalIntro(event.detail);
+  // About → Services: Grid flip (kept)
+  type ServicesInstance = InstanceType<typeof ServicesSection>;
+  type FinalContactInstance = InstanceType<typeof FinalContactSection>;
+  let servicesRef: ServicesInstance | null = null;
+  let finalContactRef: FinalContactInstance | null = null;
+
+  function handleAboutExit(event: CustomEvent<{ focusRect: DOMRect }>) {
+    servicesRef?.receivePortalIntro(event.detail);
   }
 
-  $: console.debug('[framework2] enabled', $framework2Enabled);
-
-  function handleStatsExit(event: CustomEvent<{ focusRect: DOMRect }>) {
-    aboutRef?.receivePortalIntro(event.detail);
-  }
-
+  // Services → FinalContact: CTA portal (kept)
   function handleServicesExit(event: CustomEvent<{ focusRect: DOMRect }>) {
     finalContactRef?.receivePortalIntro(event.detail);
   }
 
-  const gateMessage = css({
-    textAlign: 'center',
-    textTransform: 'uppercase',
-    letterSpacing: '0.16em',
-    fontSize: { base: '0.8rem', md: '0.95rem' },
-    color: 'muted',
-    py: { base: '4rem', md: '6rem' }
-  });
+  // Zoom-out transitions (BigFilm → FilmStories → PhotoStats → About)
+  // are now handled by masterScrollController - no event handlers needed
 </script>
 
 <MainScroll>
   <HeroSection />
   <LogosSection on:portal:film-ready={handleFilmPortal} />
 
-  {#if $framework2Enabled}
-    <BigFilmSection filmPortalReady={filmPortalReady} on:film:exit={handleFilmExit} />
-    <FilmStoriesSection bind:this={filmStoriesRef} />
-    <PhotoStatsSection on:stats:exit={handleStatsExit} />
-    <AboutSection bind:this={aboutRef} />
-    <ServicesSection on:services:exit={handleServicesExit} />
-    <FinalContactSection bind:this={finalContactRef} />
-  {:else}
-    <p class={gateMessage}>
-      Framework 2 content disabled — append ?framework2=1 to preview upcoming scenes.
-    </p>
-  {/if}
+  <!-- Zoom-out chain: sections transition via contracting circles -->
+  <BigFilmSection filmPortalReady={filmPortalReady} />
+  <FilmStoriesSection />
+  <PhotoStatsSection />
+  <AboutSection on:about:exit={handleAboutExit} />
+
+  <!-- Grid flip and CTA portal transitions -->
+  <ServicesSection bind:this={servicesRef} on:services:exit={handleServicesExit} />
+  <FinalContactSection bind:this={finalContactRef} />
 </MainScroll>
+
+<GridFlipOverlay />
+<PortalOverlay />

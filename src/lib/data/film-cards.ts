@@ -13,12 +13,13 @@ export type FilmCard = {
   stepLabel: string;
 };
 
+// Card content per Framework 2 design spec §3.1
 export const filmCards: FilmCard[] = [
   {
     id: 'netflix',
     title: 'Netflix / 14 Peaks',
     description:
-      "Lead cinematographer on Netflix's 14 Peaks — flying drones through the death zone and capturing Nimsdai's family moments.",
+      "I worked as lead cinematographer on Netflix's smash hit 14 Peaks. I shot most of the drone footage along with key scenes including the intro, Nims visiting his family and the K2 drama.",
     media: {
       type: 'video',
       src: '/videos/wix-video.mp4',
@@ -30,7 +31,7 @@ export const filmCards: FilmCard[] = [
     id: 'k2winter',
     title: 'K2 Winter Expedition',
     description:
-      'Director of Photography on the first successful K2 winter expedition—operating above 8,000 metres in minus forty conditions.',
+      'I then worked as DOP on the first successful K2 winter expedition.',
     media: {
       type: 'video',
       src: '/videos/documentary-sierra.mp4',
@@ -40,8 +41,9 @@ export const filmCards: FilmCard[] = [
   },
   {
     id: 'k2summit',
-    title: 'K2 Summit – Visual Anchor',
-    description: 'Sunset on the K2 winter push captured at camp IV — the calm before the summit drama.',
+    title: 'K2 SUMMIT 2022',
+    description:
+      'Capturing the world\'s most dangerous peak at golden hour. This shot required waiting three days at 7,800m for the perfect light.',
     metadata: ['ALT ▲ 8,611m', '−42°C', '50mm prime'],
     media: {
       type: 'image',

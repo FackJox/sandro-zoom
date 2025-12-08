@@ -8,25 +8,15 @@
   import { metadataNode, metadataDetached, metadataHome } from '$lib/motion/metadata';
   import {
     SCROLL_ORCHESTRATOR_CONTEXT_KEY,
-    type ScrollOrchestrator
+    type ScrollOrchestrator,
+    gsap,
+    masterScrollController
   } from '$lib/motion';
   import { createPortalContext } from '$lib/motion/portalStore';
   import { initLogosTimelines } from './LogosSection.motion';
   import { createPortalTimeline } from './FilmEntryPortal';
   import { getVideoSources } from '$lib/utils/video';
-
-  const logos = [
-    'Berghaus',
-    'Osprey',
-    'Red Bull TV',
-    'Epic TV',
-    'Netflix',
-    'BBC',
-    'The North Face',
-    'Black Crows',
-    'FP',
-    'Scarpa'
-  ];
+  import { clientLogos, logosPortalHeading } from '$lib/data/logos';
 
   let root: HTMLElement;
   let rail: HTMLElement;
@@ -44,6 +34,7 @@
 
   let destroy: (() => void) | undefined;
   let portalTimelineCleanup: (() => void) | undefined;
+  let sectionCleanup: (() => void) | undefined;
   let mounted = false;
   let metadataDetachedState = false;
   let lensReady = false;
@@ -144,6 +135,8 @@
 
   function initIfReady() {
     if (!mounted || !metadataStrip || !metadataDetachedState || destroy) return;
+    // NOTE: Section visibility is controlled by masterScrollController.applySectionVisibility()
+    // No manual gsap.set(root, { autoAlpha: 1 }) needed here
     destroy = initLogosTimelines({
       root,
       rail,
@@ -206,17 +199,38 @@
     attachLens();
   });
 
+  function tryPlayPortalVideo() {
+    if (!portalVideo) return;
+    const playPromise = portalVideo.play();
+    if (playPromise !== undefined) {
+      playPromise.catch((err) => {
+        console.debug('[logos] Portal video autoplay blocked:', err.message);
+        // Video will play when it becomes visible or user interacts
+      });
+    }
+  }
+
   onMount(() => {
     mounted = true;
+
+    // CRITICAL: Register section element IMMEDIATELY for visibility control
+    // This is separate from timeline registration which happens in initIfReady()
+    // GSAP best practice: element registration on mount, timeline registration when ready
+    sectionCleanup = masterScrollController.registerSection('logos', root);
+    console.debug('[logos] registered section element for visibility control');
+
     attachMetadata();
     attachLens();
     initIfReady();
     portalContext.attachElement(portal ?? null);
+    // Attempt to play portal video with error handling
+    tryPlayPortalVideo();
   });
 
   onDestroy(() => {
     destroy?.();
     portalTimelineCleanup?.();
+    sectionCleanup?.();
     metadataUnsub();
     detachedUnsub();
     metadataHomeUnsub();
@@ -229,11 +243,17 @@
   });
 
   const section = css({
-    position: 'relative',
+    position: 'absolute',
+    inset: 0,
+    display: 'flex',
+    flexDirection: 'column',
+    justifyContent: 'center',
     px: { base: layout.safeX.base, md: layout.safeX.md, lg: layout.safeX.lg },
     py: { base: '2.5rem', md: '3rem' },
     backgroundColor: 'bg',
-    overflow: 'hidden'
+    overflow: 'hidden',
+    opacity: 0,
+    visibility: 'hidden'
   });
 
   const band = css({
@@ -268,6 +288,18 @@
     textTransform: 'uppercase',
     letterSpacing: '0.14em',
     fontSize: { base: '0.75rem', md: '0.85rem' }
+  });
+
+  const logoImgClass = css({
+    height: { base: '1.5rem', md: '2rem' },
+    width: 'auto',
+    objectFit: 'contain',
+    filter: 'brightness(0) invert(1)',
+    opacity: 0.85,
+    transition: 'opacity 0.2s ease',
+    _hover: {
+      opacity: 1
+    }
   });
 
   const lensWrap = css({
@@ -319,14 +351,22 @@
     <div class={lensWrap} bind:this={lensHost}></div>
 
     <div class={railClass} bind:this={rail}>
-      {#each logos as name}
-        {#if name === 'Netflix'}
+      {#each clientLogos as logo}
+        {#if logo.isPortalTrigger}
           <span class={cx(body({}), logoClass)} bind:this={netflixLogo}>
-            {name}
+            {#if logo.image}
+              <img src={logo.image} alt={logo.name} class={logoImgClass} />
+            {:else}
+              {logo.name}
+            {/if}
           </span>
         {:else}
           <span class={cx(body({}), logoClass)}>
-            {name}
+            {#if logo.image}
+              <img src={logo.image} alt={logo.name} class={logoImgClass} />
+            {:else}
+              {logo.name}
+            {/if}
           </span>
         {/if}
       {/each}
@@ -358,6 +398,6 @@
       {/each}
     </video>
     <div class={portalFrame} bind:this={portalFrameEl} aria-hidden="true"></div>
-    <div class={portalHeading} bind:this={portalHeadingEl}>Film — High Altitude Features</div>
+    <div class={portalHeading} bind:this={portalHeadingEl}>{logosPortalHeading}</div>
   </div>
 </section>

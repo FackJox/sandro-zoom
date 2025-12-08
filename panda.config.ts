@@ -26,7 +26,18 @@ const semanticColors = {
   text: { value: '{colors.silverplate}' },
   muted: { value: '{colors.phantom}' },
   accent: { value: '{colors.eggToast}' },
-  border: { value: '{colors.coverOfNight}' }
+  border: { value: '{colors.coverOfNight}' },
+  // Alpha variants for overlays, gradients, and glassmorphism
+  'bg/90': { value: 'rgba(15, 23, 26, 0.9)' },
+  'bg/85': { value: 'rgba(15, 23, 26, 0.85)' },
+  'bg/70': { value: 'rgba(15, 23, 26, 0.7)' },
+  'bg/65': { value: 'rgba(15, 23, 26, 0.65)' },
+  'bg/60': { value: 'rgba(15, 23, 26, 0.6)' },
+  'bg/50': { value: 'rgba(15, 23, 26, 0.5)' },
+  'bg/40': { value: 'rgba(15, 23, 26, 0.4)' },
+  'bg/30': { value: 'rgba(15, 23, 26, 0.3)' },
+  'bg/15': { value: 'rgba(15, 23, 26, 0.15)' },
+  'bg/0': { value: 'rgba(15, 23, 26, 0)' }
 };
 
 const radii = {
@@ -45,8 +56,12 @@ const fontSizes = {
 };
 
 const letterSpacings = {
-  tight: { value: '-0.04em' },
-  looser: { value: '0.12em' }
+  tight: { value: '-0.05em' },
+  tighter: { value: '-0.10em' },
+  tightest: { value: '-0.20em' },
+  looser: { value: '0.12em' },
+  wide: { value: '0.18em' },
+  wider: { value: '0.25em' }
 };
 
 const lineHeights = {
@@ -72,6 +87,12 @@ const motionLevels = {
   l3: { value: '1.0' }
 };
 
+const borderWidths = {
+  stroke: { value: '1.5px' },
+  thin: { value: '1px' },
+  medium: { value: '2px' }
+};
+
 export default defineConfig({
   presets: ['@pandacss/preset-panda'],
   preflight: true,
@@ -88,7 +109,8 @@ export default defineConfig({
         lineHeights,
         animations,
         durations,
-        motionLevels
+        motionLevels,
+        borderWidths
       },
       semanticTokens: {
         colors: semanticColors

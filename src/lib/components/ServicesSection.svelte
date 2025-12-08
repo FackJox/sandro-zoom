@@ -3,34 +3,104 @@
   import { css, cx } from '$styled-system/css';
   import { heading, body } from '$styled-system/recipes';
   import { layout } from '$design/system';
-  import { gsap, brandEase, SCROLL_ORCHESTRATOR_CONTEXT_KEY, type ScrollOrchestrator } from '$lib/motion';
+  import { gsap, brandEase, SCROLL_ORCHESTRATOR_CONTEXT_KEY, type ScrollOrchestrator, masterScrollController } from '$lib/motion';
   import { getVideoSources } from '$lib/utils/video';
+  import { serviceCredits, servicesHeading, servicesCta } from '$lib/data/services';
 
-  type ServiceCard = {
+  /**
+   * ServicesSection - "Credits on Black"
+   *
+   * Framework 5 design:
+   * - Video intro frame (full-bleed, fades with lens vignette on scroll)
+   * - Black Stallion background revealed as video fades
+   * - Credits-style centered typography (all caps Trade Gothic)
+   * - Service lines scroll through "hero line" center position
+   * - CTA: "ONE MORE SHOT ↓ / SCROLL FOR FINAL CONTACT"
+   */
+
+  // Timeline progress markers (extracted for clarity)
+  const TIMELINE = {
+    VIDEO_HOLD_END: 0.15,
+    VIDEO_FADE_START: 0.15,
+    VIDEO_FADE_END: 0.35,
+    LABEL_IN_START: 0.35,
+    LABEL_IN_END: 0.45,
+    CREDITS_START: 0.45,
+    CREDITS_END: 0.80,
+    CTA_START: 0.80,
+    CTA_END: 0.90,
+    PORTAL_START: 0.92
+  } as const;
+
+  type CreditLine = {
     label: string;
-    detail: string;
     ref: HTMLElement | null;
   };
 
-  const services: ServiceCard[] = [
-    { label: 'Mountain DOP', detail: 'Feature & expedition cinematography', ref: null },
-    { label: 'Exped & Product Photography', detail: 'Summit, studio & rescue assets', ref: null },
-    { label: 'Aerial Cinematography', detail: 'FPV + heavy-lift platforms', ref: null },
-    { label: 'Stock Footage / Editorial', detail: 'Shutterstock, BBC, Netflix delivery', ref: null }
-  ];
-
-  const rollEntries = [...services, ...services];
+  // Derive credits from data file with ref slots for GSAP animation
+  const credits: CreditLine[] = serviceCredits.map((credit) => ({
+    label: credit.subtitle
+      ? `${credit.label} (${credit.subtitle})`.toUpperCase()
+      : credit.label.toUpperCase(),
+    ref: null
+  }));
 
   let root: HTMLElement;
-  let rollTrack: HTMLElement;
+  let videoLayer: HTMLVideoElement;
+  let vignetteOverlay: HTMLDivElement;
+  let creditsLabel: HTMLElement;
+  let creditsContainer: HTMLElement;
   let cta: HTMLElement;
   let portalMask: HTMLDivElement | null = null;
+
   const dispatch = createEventDispatcher<{ 'services:exit': { focusRect: DOMRect } }>();
 
   const orchestrator =
     getContext<ScrollOrchestrator | undefined>(SCROLL_ORCHESTRATOR_CONTEXT_KEY);
   let timeline: gsap.core.Timeline | null = null;
   let timelineDisposer: (() => void) | null = null;
+  let portalTimeline: gsap.core.Timeline | null = null;
+
+  // Entry portal from AboutSection
+  export function receivePortalIntro(detail?: { focusRect?: DOMRect }) {
+    if (!portalMask) return;
+    // NOTE: Section visibility is controlled by masterScrollController.applySectionVisibility()
+    // No manual gsap.set(root, { autoAlpha: 1 }) needed here
+    portalTimeline?.kill();
+
+    const fallbackRect = new DOMRect(window.innerWidth / 2, window.innerHeight / 2, 100, 100);
+    const startRect = detail?.focusRect ?? fallbackRect;
+    const targetRect = creditsContainer?.getBoundingClientRect() ?? startRect;
+
+    const startX = startRect.left + startRect.width / 2;
+    const startY = startRect.top + startRect.height / 2;
+    const targetX = targetRect.left + targetRect.width / 2;
+    const targetY = targetRect.top + targetRect.height / 2;
+
+    portalTimeline = gsap.timeline({ defaults: { ease: brandEase } });
+    portalTimeline
+      .set(portalMask, {
+        opacity: 1,
+        width: startRect.width || 60,
+        height: startRect.width || 60,
+        left: startX,
+        top: startY
+      })
+      .to(portalMask, {
+        left: targetX,
+        top: targetY,
+        duration: 0.4
+      })
+      .to(portalMask, {
+        width: window.innerWidth * 1.6,
+        height: window.innerWidth * 1.6,
+        duration: 0.5
+      }, '>-0.2')
+      .to(portalMask, {
+        opacity: 0,
+        duration: 0.3
+      }, '>-0.15');
+  }
 
   onMount(async () => {
     await tick();
@@ -39,79 +109,134 @@
     timeline = null;
     timelineDisposer = null;
 
-    const cards = services.map((service) => service.ref).filter(Boolean) as HTMLElement[];
-    if (!root || cards.length === 0 || !rollTrack) return;
+    const creditLines = credits.map((c) => c.ref).filter(Boolean) as HTMLElement[];
+    if (!root || !videoLayer || !creditsContainer || !cta || !vignetteOverlay) return;
 
+    // Create paused timeline - controlled by master scroll controller
     const tl = gsap.timeline({
       defaults: { ease: brandEase },
-      scrollTrigger: {
-        trigger: root,
-        start: 'top top',
-        end: '+=300%',
-        scrub: true,
-        pin: true
+      paused: true
+    });
+
+    // Register with master scroll controller for progress updates
+    const unsubscribeMaster = masterScrollController.onSectionProgress('services', (progress, isActive) => {
+      tl.progress(progress);
+    });
+
+    // Register section element with master controller
+    const unregisterSection = masterScrollController.registerSection('services', root, tl);
+
+    // Store cleanup
+    (tl as any).__masterCleanup = () => {
+      unsubscribeMaster();
+      unregisterSection();
+    };
+
+    // Initial states
+    gsap.set(videoLayer, { opacity: 1 });
+    gsap.set(vignetteOverlay, { opacity: 0 });
+    gsap.set(creditsLabel, { autoAlpha: 0, y: 20 });
+    // Credits start below viewport center
+    gsap.set(creditLines, { autoAlpha: 0, yPercent: 100 });
+    gsap.set(cta, { autoAlpha: 0, y: 40 });
+
+    /**
+     * Timeline structure per Framework 5:
+     * 0.00-0.15: Video visible at full opacity
+     * 0.15-0.35: Video fades with lens vignette effect
+     * 0.35-0.45: "SERVICES / CREDITS" label fades in
+     * 0.45-0.80: Credit lines scroll through "hero line" center
+     * 0.80-0.90: CTA fades in
+     * 0.90-1.00: Portal mask exit
+     */
+
+    // 0.00-0.15: Video visible (no animation needed, just hold)
+    tl.addLabel('videoHold', 0);
+
+    // 0.15-0.35: Video fades with lens vignette closing effect
+    tl.addLabel('videoFade', TIMELINE.VIDEO_FADE_START);
+    // Vignette closes in (lens closing effect)
+    tl.to(vignetteOverlay, {
+      opacity: 1,
+      duration: 0.2,
+      ease: 'power2.inOut'
+    }, 'videoFade');
+    // Video fades out behind vignette
+    tl.to(videoLayer, {
+      opacity: 0,
+      duration: 0.2
+    }, 'videoFade+=0.05');
+
+    // 0.35-0.45: Credits label fades in
+    tl.addLabel('labelIn', TIMELINE.LABEL_IN_START);
+    tl.to(creditsLabel, { autoAlpha: 1, y: 0, duration: 0.1 }, 'labelIn');
+
+    // 0.45-0.80: Credit lines scroll through "hero line" center
+    // Each line: rises from below → holds at center (hero position) → continues upward
+    tl.addLabel('creditsRoll', TIMELINE.CREDITS_START);
+
+    const creditDuration = (TIMELINE.CREDITS_END - TIMELINE.CREDITS_START) / creditLines.length;
+    const heroHoldDuration = creditDuration * 0.4; // 40% of each line's time is spent at center
+    const enterDuration = creditDuration * 0.35;   // Time to enter from below
+    const exitDuration = creditDuration * 0.25;    // Time to exit upward
+
+    creditLines.forEach((line, i) => {
+      const lineStart = TIMELINE.CREDITS_START + i * creditDuration;
+
+      // Phase 1: Enter from below to center (hero position)
+      tl.to(line, {
+        autoAlpha: 1,
+        yPercent: 0,
+        duration: enterDuration,
+        ease: brandEase
+      }, lineStart);
+
+      // Phase 2: Hold at center (hero line)
+      // No animation needed - just a pause at yPercent: 0
+
+      // Phase 3: Exit upward and slightly fade
+      const exitStart = lineStart + enterDuration + heroHoldDuration;
+
+      // Don't exit the last line - it stays visible with CTA
+      if (i < creditLines.length - 1) {
+        tl.to(line, {
+          yPercent: -80,
+          autoAlpha: 0.3,
+          duration: exitDuration,
+          ease: 'power1.in'
+        }, exitStart);
       }
     });
 
-    gsap.set(cards, { transformStyle: 'preserve-3d', rotateX: -90, opacity: 0 });
+    // 0.80-0.90: CTA fades in with subtle rise
+    tl.addLabel('ctaIn', TIMELINE.CTA_START);
+    tl.to(cta, { autoAlpha: 1, y: 0, duration: 0.1 }, 'ctaIn');
 
-    tl.fromTo(
-      cards,
-      { rotateX: -90, opacity: 0 },
-      { rotateX: 0, opacity: 1, stagger: 0.08 },
-      0.1
-    )
-      .to(
-        cards,
-        {
-          rotateY: (index) => (index % 2 === 0 ? -12 : 12),
-          z: -100,
-          y: (index) => index * -20,
-          duration: 0.6
-        },
-        0.7
-      )
-      .to(
-        cards,
-        {
-          opacity: 0,
-          duration: 0.3
-        },
-        1.1
-      )
-      .fromTo(
-        rollTrack,
-        { yPercent: 0 },
-        { yPercent: -50, duration: 1.4, ease: 'none' },
-        1.2
-      )
-      .fromTo(
-        cta,
-        { autoAlpha: 0, y: 40 },
-        { autoAlpha: 1, y: 0, duration: 0.5 },
-        2
-      )
-      .call(() => {
-        const rect = cta?.getBoundingClientRect();
-        if (!rect || !portalMask) return;
-        gsap.set(portalMask, {
-          opacity: 1,
-          width: 36,
-          height: 36,
-          left: rect.left + rect.width / 2,
-          top: rect.top + rect.height / 2
-        });
-        gsap.to(portalMask, {
-          width: rect.width * 1.8,
-          height: rect.width * 1.8,
-          duration: 0.5,
-          ease: brandEase,
-          onComplete: () => {
-            portalMask && gsap.set(portalMask, { opacity: 0 });
-            dispatch('services:exit', { focusRect: rect });
-          }
-        });
-      }, undefined, 2.2);
+    // 0.90-1.00: Portal mask exit animation
+    tl.addLabel('portalExit', TIMELINE.PORTAL_START);
+    tl.call(() => {
+      const rect = cta?.getBoundingClientRect();
+      if (!rect || !portalMask) return;
+
+      gsap.set(portalMask, {
+        opacity: 1,
+        width: 36,
+        height: 36,
+        left: rect.left + rect.width / 2,
+        top: rect.top + rect.height / 2
+      });
+
+      gsap.to(portalMask, {
+        width: rect.width * 1.8,
+        height: rect.width * 1.8,
+        duration: 0.5,
+        ease: brandEase,
+        onComplete: () => {
+          portalMask && gsap.set(portalMask, { opacity: 0 });
+          dispatch('services:exit', { focusRect: rect });
+        }
+      });
+    }, undefined, 'portalExit');
 
     timeline = tl;
     if (orchestrator) {
@@ -120,77 +245,124 @@
   });
 
   onDestroy(() => {
+    (timeline as any)?.__masterCleanup?.();
     timeline?.kill();
     timelineDisposer?.();
     timeline = null;
     timelineDisposer = null;
+    portalTimeline?.kill();
+    portalTimeline = null;
   });
 
+  // Styles
   const sectionClass = css({
-    minHeight: '100vh',
-    backgroundColor: 'bg',
+    position: 'absolute',
+    inset: 0,
+    backgroundColor: 'blackStallion',
     color: 'text',
-    px: { base: layout.safeX.base, md: layout.safeX.md, lg: layout.safeX.lg },
-    py: { base: '4rem', md: '5rem' },
+    overflow: 'hidden',
     display: 'flex',
     flexDirection: 'column',
-    gap: '2rem'
+    alignItems: 'center',
+    justifyContent: 'center',
+    opacity: 0,
+    visibility: 'hidden'
   });
+
   const videoClass = css({
+    position: 'absolute',
+    inset: 0,
     width: '100%',
-    height: '40vh',
+    height: '100%',
     objectFit: 'cover',
-    borderWidth: '1px',
-    borderColor: 'border'
+    zIndex: 1
   });
-  const headingClass = cx(heading({ size: 'sm' }), css({ letterSpacing: '0.18em' }));
-  const gridClass = css({
-    display: 'grid',
-    gap: '1rem',
-    gridTemplateColumns: { base: '1fr', md: 'repeat(2, 1fr)' },
-    perspective: '1600px'
+
+  // Lens vignette overlay - radial gradient that closes in like a lens
+  const vignetteClass = css({
+    position: 'absolute',
+    inset: 0,
+    zIndex: 2,
+    pointerEvents: 'none',
+    background: `radial-gradient(
+      ellipse 80% 80% at 50% 50%,
+      transparent 0%,
+      transparent 30%,
+      rgba(15, 23, 26, 0.3) 50%,
+      rgba(15, 23, 26, 0.7) 70%,
+      rgba(15, 23, 26, 1) 100%
+    )`
   });
-  const cardClass = css({
-    borderWidth: '1px',
-    borderColor: 'border',
-    borderRadius: '4px',
-    padding: '1.25rem',
-    minHeight: '9rem',
-    backgroundColor: 'rgba(15,23,26,0.85)',
+
+  const creditsContainerClass = css({
+    position: 'relative',
+    zIndex: 3,
     display: 'flex',
     flexDirection: 'column',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: '1.5rem',
+    textAlign: 'center',
+    px: { base: layout.safeX.base, md: layout.safeX.md },
+    py: '2rem',
+    minHeight: '50vh'
+  });
+
+  const creditsLabelClass = cx(
+    heading({ size: 'sm' }),
+    css({
+      letterSpacing: '0.25em',
+      textTransform: 'uppercase',
+      color: 'eggToast',
+      borderBottomWidth: '1px',
+      borderColor: 'eggToast',
+      paddingBottom: '0.75rem',
+      marginBottom: '1rem'
+    })
+  );
+
+  const creditLineClass = cx(
+    heading({ size: 'md' }),
+    css({
+      letterSpacing: '0.18em',
+      textTransform: 'uppercase',
+      color: 'silverplate',
+      lineHeight: 1.4,
+      // Credit lines should be positioned for "hero line" effect
+      position: 'relative'
+    })
+  );
+
+  const ctaContainerClass = css({
+    position: 'absolute',
+    bottom: { base: '3rem', md: '4rem' },
+    left: 0,
+    right: 0,
+    zIndex: 4,
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'center',
     gap: '0.5rem'
   });
-  const cardLabel = heading({ size: 'md' });
-  const cardDetail = body({ tone: 'standard' });
-  const rollShell = css({
-    overflow: 'hidden',
-    borderWidth: '1px',
-    borderColor: 'border',
-    borderRadius: '4px',
-    height: '10rem'
-  });
-  const rollTrackClass = css({
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '0.75rem',
-    padding: '1rem'
-  });
-  const rollLine = css({
-    display: 'flex',
-    justifyContent: 'space-between',
-    textTransform: 'uppercase',
-    letterSpacing: '0.18em',
-    fontSize: '0.85rem'
-  });
-  const ctaClass = cx(
+
+  const ctaLineClass = cx(
     body({ tone: 'standard' }),
     css({
       textTransform: 'uppercase',
       letterSpacing: '0.2em',
-      textAlign: 'center'
+      textAlign: 'center',
+      color: 'eggToast'
     })
   );
+
+  const ctaDividerClass = css({
+    width: '4rem',
+    height: '1px',
+    backgroundColor: 'eggToast',
+    opacity: 0.5,
+    my: '0.5rem'
+  });
+
   const portalMaskClass = css({
     position: 'fixed',
     width: '40px',
@@ -210,37 +382,40 @@
 </script>
 
 <section bind:this={root} class={sectionClass} id="services">
-  <video class={videoClass} autoplay muted loop playsinline>
+  <!-- Video intro layer (fades out on scroll) -->
+  <video
+    class={videoClass}
+    bind:this={videoLayer}
+    autoplay
+    muted
+    loop
+    playsinline
+  >
     {#each videoSources as source}
       <source src={source.src} type={source.type} />
     {/each}
   </video>
 
-  <h2 class={headingClass}>Services & Credits</h2>
-  <div class={gridClass}>
-    {#each services as service}
-      <article class={cardClass} bind:this={service.ref}>
-        <p class={cardLabel}>{service.label}</p>
-        <p class={cardDetail}>{service.detail}</p>
-      </article>
+  <!-- Lens vignette overlay (fades in as video fades out) -->
+  <div class={vignetteClass} bind:this={vignetteOverlay}></div>
+
+  <!-- Credits content (centered on black) -->
+  <div class={creditsContainerClass} bind:this={creditsContainer}>
+    <h2 class={creditsLabelClass} bind:this={creditsLabel}>{servicesHeading}</h2>
+
+    {#each credits as credit}
+      <p class={creditLineClass} bind:this={credit.ref}>{credit.label}</p>
     {/each}
   </div>
 
-  <div class={rollShell}>
-    <div class={rollTrackClass} bind:this={rollTrack}>
-      {#each rollEntries as entry}
-        <div class={rollLine}>
-          <span>{entry.label}</span>
-          <span>{entry.detail}</span>
-        </div>
-      {/each}
-    </div>
+  <!-- CTA at bottom -->
+  <div class={ctaContainerClass} bind:this={cta}>
+    <div class={ctaDividerClass}></div>
+    <p class={ctaLineClass}>{servicesCta.line1}</p>
+    <p class={ctaLineClass}>{servicesCta.line2}</p>
+    <div class={ctaDividerClass}></div>
   </div>
 
-  <div class={ctaClass} bind:this={cta}>
-    <p>One more shot ↓</p>
-    <p>Scroll for final contact</p>
-  </div>
-
+  <!-- Portal mask for transition -->
   <div class={portalMaskClass} bind:this={portalMask} aria-hidden="true"></div>
 </section>

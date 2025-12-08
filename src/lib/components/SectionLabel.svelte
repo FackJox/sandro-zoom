@@ -27,7 +27,8 @@
   const titleClass = cx(
     heading({ size: 'sm' }),
     css({
-      color: 'text'
+      color: 'text',
+      textTransform: 'uppercase'
     })
   );
   const slotClass = css({

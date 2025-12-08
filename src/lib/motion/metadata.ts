@@ -1,7 +1,7 @@
 import { writable } from 'svelte/store';
 
 export const HERO_METADATA =
-  'ALT ▲ 8,000M • EVEREST / K2 • HIGH ALTITUDE DIRECTOR OF PHOTOGRAPHY';
+  'ALT ▲ 8,000M • EVEREST / K2 • DIRECTOR OF PHOTOGRAPHY';
 export const LOGOS_METADATA =
   'BERGHAUS • OSPREY • RED BULL TV • NETFLIX • BBC • TNF';
 

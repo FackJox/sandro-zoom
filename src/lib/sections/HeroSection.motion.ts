@@ -1,4 +1,4 @@
-import { gsap, ScrollTrigger, brandEase, type ScrollOrchestrator } from '$lib/motion';
+import { gsap, brandEase, type ScrollOrchestrator, masterScrollController } from '$lib/motion';
 import {
   registerLensSegment,
   setLensSegmentProgress,
@@ -21,6 +21,7 @@ interface HeroTimelineOptions {
   media: HTMLVideoElement;
   slab: HTMLElement;
   lens: HTMLElement;
+  lensMedia: HTMLVideoElement | null;
   metadata: HTMLElement;
   halo: HTMLElement;
   strips: Array<HTMLVideoElement | null>;
@@ -65,7 +66,7 @@ export function initHeroTimelines(options: HeroTimelineOptions) {
 
   const heroSegment = registerLensSegment('hero', (tl, proxy, emit) => {
     tl.to(proxy, {
-      xPercent: 12,
+      xPercent: -12,
       yPercent: -38,
       scale: 0.74,
       opacity: 0.68,
@@ -105,10 +106,15 @@ export function initHeroTimelines(options: HeroTimelineOptions) {
       .from(options.lens, { scale: 0.8, opacity: 0, duration: 0.4 }, '-=0.35')
       .from(options.metadata, { y: 20, opacity: 0, duration: 0.4 }, '-=0.25');
 
+    // Set lens media to initial zoomed-in state for later zoom-out during portal
+    if (options.lensMedia) {
+      gsap.set(options.lensMedia, { scale: 1.1 });
+    }
+
     if (copyTargets.length > 0) {
       introTl.from(
         copyTargets,
-        { yPercent: 15, opacity: 0, duration: 0.35, stagger: 0.08 },
+        { yPercent: 15, opacity: 0, duration: 0.35, stagger: 0.05 },
         '-=0.15'
       );
     }
@@ -129,26 +135,51 @@ export function initHeroTimelines(options: HeroTimelineOptions) {
     registerAnimation('hero:intro', introTl);
   }
 
+  // Create paused timeline - controlled by master scroll controller
   const morphTl = gsap.timeline({
     defaults: { ease: brandEase },
-    scrollTrigger: {
-      trigger: options.root,
-      start: 'top top',
-      end: '+=240%',
-      scrub: true,
-      pin: true,
-      anticipatePin: 1,
-      onUpdate(self) {
-        setLensSegmentProgress(heroSegment, self.progress);
-        if (self.progress <= 0.05) {
-          restoreHeroMetadata();
-        }
-      },
-      onLeaveBack() {
-        restoreHeroMetadata();
-      }
-    }
+    paused: true
   });
+
+  // Track active state for callbacks
+  let wasActive = false;
+
+  // Register with master scroll controller for progress updates
+  const unsubscribeMaster = masterScrollController.onSectionProgress('hero', (progress, isActive) => {
+    morphTl.progress(progress);
+    setLensSegmentProgress(heroSegment, progress);
+
+    if (progress <= 0.05) {
+      restoreHeroMetadata();
+    }
+
+    // Handle enter/leave callbacks
+    if (isActive && !wasActive) {
+      console.debug('[hero-morph] onEnter');
+    } else if (!isActive && wasActive && progress >= 0.95) {
+      console.debug('[hero-morph] onLeave');
+    } else if (!isActive && wasActive && progress <= 0.05) {
+      restoreHeroMetadata();
+      console.debug('[hero-morph] onLeaveBack');
+    }
+    wasActive = isActive;
+
+    console.debug(
+      '[hero-morph] update',
+      'progress',
+      Number(progress.toFixed(3)),
+      'isActive',
+      isActive
+    );
+  });
+
+  // Register section element with master controller
+  const unregisterSection = masterScrollController.registerSection('hero', options.root, morphTl);
+
+  console.debug('[hero-morph] timeline created (paused, master-controlled)');
+
+  // Set initial clip-path for circular contraction animation
+  gsap.set(options.root, { clipPath: 'circle(100% at 50% 50%)' });
 
   morphTl
     .to({}, { duration: 0.25 })
@@ -157,11 +188,15 @@ export function initHeroTimelines(options: HeroTimelineOptions) {
       {
         scale: 0.9,
         filter: 'brightness(0.72)',
+        clipPath: 'circle(35% at 50% 50%)',  // Contract simultaneously with scale/darken
         transformOrigin: 'center center'
       },
       '-=0.02'
     )
-    .to(options.halo, { opacity: 0.8, scale: 1.2, duration: 0.4 }, '<')
+    // Halo expands outward from lens during portal transition, then fades
+    .to(options.halo, { opacity: 0.6, scale: 1.8, duration: 0.3 }, '<')
+    .to(options.halo, { opacity: 0.9, scale: 2.4, duration: 0.25 }, '>')
+    .to(options.lensMedia, { scale: 1.0, duration: 0.5 }, '<-0.3')
     .to(
       options.metadata,
       {
@@ -194,55 +229,48 @@ export function initHeroTimelines(options: HeroTimelineOptions) {
       attachLensToSection('logos');
     })
     .to(options.metadata, { opacity: 1, duration: 0.2 }, '>-0.05')
-    .to(options.halo, { opacity: 0, duration: 0.2 }, '>-0.1');
-
-  if (morphTl.scrollTrigger) {
-    triggers.push(morphTl.scrollTrigger);
-  }
+    .to(options.halo, { opacity: 0, duration: 0.2 }, '>-0.1')
+    // Final clip-path shrink to nothing
+    .to(options.root, {
+      clipPath: 'circle(0% at 50% 50%)',
+      opacity: 0,
+      duration: 0.25
+    }, '>');
 
   registerAnimation('hero:morph', morphTl);
 
   if (!prefersReducedMotion) {
-    const slabParallax = gsap.to(options.slab, {
+    // Add parallax animations to morphTl (all progress-driven, no individual ScrollTriggers)
+
+    // Slab parallax - add to timeline with relative position
+    morphTl.to(options.slab, {
       yPercent: -4,
       ease: 'none',
-      scrollTrigger: {
-        trigger: options.root,
-        start: 'top top',
-        end: 'bottom top',
-        scrub: true
-      }
-    });
-    registerAnimation('hero:slabParallax', slabParallax);
+      duration: 1
+    }, 0);
 
-    const lensParallax = tweenLensProxy({
-      idleOffset: -6,
-      ease: 'none',
-      scrollTrigger: {
-        trigger: options.root,
-        start: 'top top',
-        end: 'bottom-=20% top',
-        scrub: true
+    // Lens parallax - integrated with morphTl progress
+    morphTl.to({}, {
+      duration: 0.8,
+      onUpdate: function() {
+        const progress = this.progress();
+        Object.assign(lensDefaultState, { idleOffset: -6 * progress });
       }
-    });
-    registerAnimation('hero:lensParallax', lensParallax);
+    }, 0);
 
+    // Circular strip masks parallax - each strip drifts at different speeds during progress
     sliceElements.forEach((slice, index) => {
-      const stripTween = gsap.to(slice, {
-        yPercent: -10 - index * 5,
-        xPercent: index * 4,
-        rotation: index % 2 ? 10 : -8,
+      const depthMultiplier = 1 + index * 0.5;
+      morphTl.to(slice, {
+        yPercent: -15 * depthMultiplier,
+        xPercent: (index % 2 ? 8 : -6) * depthMultiplier,
+        rotation: index % 2 ? 12 : -10,
         ease: 'none',
-        scrollTrigger: {
-          trigger: options.root,
-          start: 'top top',
-          end: 'bottom top',
-          scrub: true
-        }
-      });
-      registerAnimation(`hero:strip-${index}`, stripTween);
+        duration: 1
+      }, 0);
     });
 
+    // Media drift - standalone continuous animation (not scroll-driven)
     const mediaDrift = gsap.to(options.media, {
       scale: 1.04,
       duration: 6,
@@ -256,6 +284,10 @@ export function initHeroTimelines(options: HeroTimelineOptions) {
   }
 
   return () => {
+    // Clean up master scroll subscriptions
+    unsubscribeMaster();
+    unregisterSection();
+
     ctx.revert();
     heroTimelineDisposers.forEach((dispose) => dispose());
     heroTimelineDisposers.length = 0;

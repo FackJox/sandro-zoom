@@ -1,18 +1,26 @@
 <script lang="ts">
   import { getContext, onDestroy, onMount, tick } from 'svelte';
-  import { css, cx } from '$styled-system/css';
-  import { heading, body } from '$styled-system/recipes';
+  import { css } from '$styled-system/css';
   import { layout } from '$design/system';
-  import { gsap, brandEase, SCROLL_ORCHESTRATOR_CONTEXT_KEY, type ScrollOrchestrator } from '$lib/motion';
+  import { gsap, brandEase, SCROLL_ORCHESTRATOR_CONTEXT_KEY, type ScrollOrchestrator, masterScrollController } from '$lib/motion';
   import SectionLabel from './SectionLabel.svelte';
   import StepIndicator from './StepIndicator.svelte';
-  import LensBug from './LensBug.svelte';
   import { getVideoSources } from '$lib/utils/video';
   import { filmStories } from '$lib/data/film-stories';
+  import { attachFilmStoriesExitPortal } from '$lib/sections/FilmStoriesExit';
+  import {
+    filmStoryViewport,
+    filmStoryCard,
+    filmStoryMedia,
+    filmStoryTitle,
+    filmStoryBody,
+    filmStoryFocusRing
+  } from '$lib/styles/recipes';
 
   type StoryCard = {
     title: string;
     src: string;
+    body: string;
     ref: HTMLElement | null;
     mediaRef: HTMLElement | null;
   };
@@ -21,76 +29,88 @@
 
   let root: HTMLElement;
   let viewport: HTMLElement;
-  let hudHost: HTMLElement;
+  let contentGrid: HTMLElement;
+  let infoPanel: HTMLElement;
   let focusRing: HTMLDivElement | null = null;
-  let portalMask: HTMLDivElement | null = null;
-  let portalTimeline: gsap.core.Timeline | null = null;
   let activeIndex = 0;
-  let mounted = false;
   let timeline: gsap.core.Timeline | null = null;
   let timelineDisposer: (() => void) | null = null;
+  let sectionCleanup: (() => void) | null = null;
+  let exitPortalCleanup: (() => void) | null = null;
+
+  // Text element refs for GSAP animation
+  let mobileTitleRef: HTMLElement | null = null;
+  let mobileBodyRef: HTMLElement | null = null;
+  let desktopTitleRef: HTMLElement | null = null;
+  let desktopBodyRef: HTMLElement | null = null;
 
   const orchestrator =
     getContext<ScrollOrchestrator | undefined>(SCROLL_ORCHESTRATOR_CONTEXT_KEY);
 
   const steps = stories.map((story, idx) => `${idx + 1}. ${story.title.split('/')[0].trim()}`);
 
+  // Current story content (updated via animation)
+  let displayTitle = stories[0]?.title ?? '';
+  let displayBody = stories[0]?.body ?? '';
+
+  // Animate title/body crossfade with slide (§3.5)
+  const TEXT_STAGGER_MS = 0.06;
+  function animateTextTransition(newIndex: number) {
+    const newStory = stories[newIndex];
+    if (!newStory) return;
+
+    const titleEls = [mobileTitleRef, desktopTitleRef].filter((el): el is HTMLElement => el !== null);
+    const bodyEls = [mobileBodyRef, desktopBodyRef].filter((el): el is HTMLElement => el !== null);
+    const allEls = [...titleEls, ...bodyEls];
+
+    if (!allEls.length) {
+      // Fallback: just update text if no refs
+      displayTitle = newStory.title;
+      displayBody = newStory.body;
+      return;
+    }
+
+    // Crossfade out + slide up, then update text, then slide in
+    gsap.timeline()
+      // Fade out and slide up current text
+      .to(allEls, {
+        yPercent: -12,
+        autoAlpha: 0,
+        duration: 0.2,
+        stagger: TEXT_STAGGER_MS,
+        ease: brandEase
+      })
+      // Update text content
+      .call(() => {
+        displayTitle = newStory.title;
+        displayBody = newStory.body;
+      })
+      // Reset position below
+      .set(allEls, { yPercent: 12 })
+      // Slide in from below with stagger
+      .to(allEls, {
+        yPercent: 0,
+        autoAlpha: 1,
+        duration: 0.3,
+        stagger: TEXT_STAGGER_MS,
+        ease: brandEase
+      });
+  }
+
   function syncFocusRing(index: number, immediate = false) {
     const media = stories[index]?.mediaRef;
     if (!media || !focusRing || !viewport) return;
     const mediaRect = media.getBoundingClientRect();
     const viewportRect = viewport.getBoundingClientRect();
-    const targetX = mediaRect.left - viewportRect.left + mediaRect.width * 0.8;
-    const targetY = mediaRect.top - viewportRect.top + mediaRect.height * 0.2;
+    const targetX = mediaRect.left - viewportRect.left + mediaRect.width * 0.5;
+    const targetY = mediaRect.top - viewportRect.top + mediaRect.height * 0.5;
     gsap.to(focusRing, {
       x: targetX,
       y: targetY,
-      duration: immediate ? 0 : 0.45,
+      opacity: 1,
+      duration: immediate ? 0 : 0.35,
       ease: brandEase
     });
-  }
-
-  export function receivePortalIntro(detail?: { focusRect?: DOMRect }) {
-    if (!portalMask) return;
-    portalTimeline?.kill();
-    const fallbackRect = new DOMRect(window.innerWidth / 2, window.innerHeight * 0.65, 40, 40);
-    const startRect = detail?.focusRect ?? fallbackRect;
-    const targetRect = stories[0]?.mediaRef?.getBoundingClientRect() ?? startRect;
-    const start = {
-      x: startRect.left + startRect.width / 2,
-      y: startRect.top + startRect.height / 2
-    };
-    const target = {
-      x: targetRect.left + targetRect.width / 2,
-      y: targetRect.top + targetRect.height / 2
-    };
-    const viewportRect = viewport?.getBoundingClientRect();
-    if (!viewportRect) return;
-
-    portalTimeline = gsap.timeline({ defaults: { ease: brandEase } });
-    portalTimeline
-      .set(portalMask, {
-        opacity: 1,
-        width: 48,
-        height: 48,
-        left: start.x,
-        top: start.y
-      })
-      .to(portalMask, {
-        left: target.x,
-        top: target.y,
-        duration: 0.45
-      })
-      .to(
-        portalMask,
-        {
-          width: viewportRect.width,
-          height: viewportRect.width,
-          duration: 0.5
-        },
-        '>-0.2'
-      )
-      .to(portalMask, { opacity: 0, duration: 0.3 }, '>-0.15');
   }
 
   async function initTimeline() {
@@ -104,173 +124,292 @@
       return;
     }
 
+    // Initialize: first story visible with full circle, others hidden
     stories.forEach((story, index) => {
       if (!story.ref) return;
       gsap.set(story.ref, {
         autoAlpha: index === 0 ? 1 : 0,
-        clipPath: index === 0 ? 'circle(140% at 50% 50%)' : 'circle(0% at 50% 50%)'
+        clipPath: index === 0 ? 'circle(100% at 50% 50%)' : 'circle(0% at 50% 50%)',
+        xPercent: 0
       });
     });
     activeIndex = 0;
     syncFocusRing(0, true);
 
+    // Create paused timeline - controlled by master scroll controller
     const tl = gsap.timeline({
       defaults: { ease: brandEase },
-      scrollTrigger: {
-        trigger: root,
-        start: 'top top',
-        end: '+=260%',
-        scrub: true,
-        pin: true
-      }
+      paused: true
     });
 
+    // Register with master scroll controller for progress updates
+    const unsubscribeMaster = masterScrollController.onSectionProgress('filmStories', (progress) => {
+      tl.progress(progress);
+    });
+
+    // Register section element with master controller
+    const unregisterSection = masterScrollController.registerSection('filmStories', root, tl);
+
+    // Store cleanup functions
+    const masterCleanup = () => {
+      unsubscribeMaster();
+      unregisterSection();
+    };
+
+    // Build circular iris transitions between stories (§3.5)
     stories.forEach((_, index) => {
       const current = stories[index]?.ref;
       const next = stories[index + 1]?.ref;
       if (!current || !next) return;
-      const start = (index + 0.95) / stories.length;
+
+      // Each story gets ~1/3 of the timeline
+      const storyDuration = 1 / stories.length;
+      const transitionStart = (index + 0.85) * storyDuration;
+      const transitionDuration = 0.15 * storyDuration;
+
+      // Circular iris transition:
+      // 1. Focus ring appears and tightens
+      // 2. Current video iris closes (circle shrinks)
+      // 3. Next video iris opens (circle expands)
+      // 4. Focus ring lifts away
       tl
+        // Focus ring appears and scales up (preparing for incoming)
+        .to(
+          focusRing,
+          {
+            opacity: 1,
+            scale: 1.15,
+            duration: transitionDuration * 0.3
+          },
+          transitionStart
+        )
+        // Current video: iris closes (circle mask shrinks to 0%)
         .to(
           current,
           {
             clipPath: 'circle(0% at 50% 50%)',
             autoAlpha: 0,
-            duration: 0.35
+            duration: transitionDuration * 0.5,
+            ease: 'power2.in'
           },
-          start
+          transitionStart
         )
+        // Slight dolly shift during transition for lens pan feel
+        .to(
+          current,
+          {
+            xPercent: -15,
+            duration: transitionDuration * 0.5,
+            ease: 'power2.inOut'
+          },
+          transitionStart
+        )
+        // Focus ring tightens (shrinks) as it focuses on incoming
+        .to(
+          focusRing,
+          {
+            scale: 0.9,
+            duration: transitionDuration * 0.25,
+            ease: 'power2.in'
+          },
+          transitionStart + transitionDuration * 0.3
+        )
+        // Next video: iris opens (circle mask expands from 0% to 100%)
         .fromTo(
           next,
-          { clipPath: 'circle(0% at 50% 50%)', autoAlpha: 0 },
-          { clipPath: 'circle(140% at 50% 50%)', autoAlpha: 1, duration: 0.4 },
-          start + 0.05
+          {
+            clipPath: 'circle(0% at 50% 50%)',
+            autoAlpha: 0,
+            xPercent: 10
+          },
+          {
+            clipPath: 'circle(100% at 50% 50%)',
+            autoAlpha: 1,
+            xPercent: 0,
+            duration: transitionDuration * 0.6,
+            ease: 'power2.out'
+          },
+          transitionStart + transitionDuration * 0.4
         )
+        // Focus ring lifts away (scales up and fades) as frame fills viewport
+        .to(
+          focusRing,
+          {
+            scale: 1.3,
+            opacity: 0.6,
+            duration: transitionDuration * 0.3,
+            ease: 'power2.out'
+          },
+          transitionStart + transitionDuration * 0.7
+        )
+        // Reset focus ring for next transition
+        .to(
+          focusRing,
+          {
+            scale: 1,
+            opacity: 0,
+            duration: transitionDuration * 0.1
+          },
+          transitionStart + transitionDuration * 0.95
+        )
+        // Update active index and animate text
         .call(
           (i: number) => {
             activeIndex = i;
-            syncFocusRing(i);
+            syncFocusRing(i, true);
+            animateTextTransition(i);
           },
           [index + 1],
-          start + 0.08
+          transitionStart + transitionDuration * 0.5
         );
     });
 
     timeline = tl;
+
+    // Attach exit portal (Framework 3 §3.6) - concentric rings, vertical strip, stats preview
+    const storyCards = stories.map(s => s.ref).filter(Boolean) as HTMLElement[];
+    exitPortalCleanup = attachFilmStoriesExitPortal({
+      timeline: tl,
+      storyCards,
+      viewport,
+      onPortalReady: (detail) => {
+        console.debug('[film-stories] exit portal ready', detail.focusRect);
+      }
+    });
+
+    // Register parallax targets for zoom-out transitions
+    const parallaxTargets = [viewport, infoPanel, mobileTitleRef, desktopTitleRef, mobileBodyRef, desktopBodyRef].filter(Boolean) as HTMLElement[];
+    const unregisterParallax = masterScrollController.registerParallaxTargets('filmStories', parallaxTargets);
+
+    // Store cleanup for master scroll
+    sectionCleanup = () => {
+      masterCleanup();
+      unregisterParallax();
+    };
+
     if (orchestrator) {
       timelineDisposer = orchestrator.registerSectionTimeline('film-stories', () => tl);
     }
   }
 
   onMount(() => {
-    mounted = true;
     initTimeline();
   });
 
   onDestroy(() => {
+    // Clean up master scroll subscriptions
+    sectionCleanup?.();
+    sectionCleanup = null;
+    // Clean up exit portal DOM elements
+    exitPortalCleanup?.();
+    exitPortalCleanup = null;
     timeline?.kill();
     timelineDisposer?.();
     timeline = null;
     timelineDisposer = null;
-    portalTimeline?.kill();
-    portalTimeline = null;
   });
 
+  // Styles
   const sectionClass = css({
-    minHeight: '100vh',
-    color: 'text',
-    px: { base: layout.safeX.base, md: layout.safeX.md, lg: layout.safeX.lg },
-    py: { base: '4rem', md: '5rem' }
-  });
-  const viewportClass = css({
-    position: 'relative',
-    width: '100%',
-    aspectRatio: '2.05 / 1',
-    borderWidth: '1px',
-    borderColor: 'accent',
-    overflow: 'hidden',
-    backgroundColor: 'blackPearl'
-  });
-  const cardClass = css({
     position: 'absolute',
     inset: 0,
+    color: 'text',
+    px: { base: layout.safeX.base, md: layout.safeX.md, lg: layout.safeX.lg },
+    py: { base: '3rem', md: '4rem' },
     display: 'flex',
     flexDirection: 'column',
-    gap: '0.75rem',
-    padding: '1.25rem'
-  });
-  const mediaClass = css({
-    flex: 1,
-    borderWidth: '1px',
-    borderColor: 'border',
-    overflow: 'hidden'
-  });
-  const videoClass = css({ width: '100%', height: '100%', objectFit: 'cover' });
-  const titleClass = cx(
-    heading({ size: 'sm' }),
-    css({ color: 'text', letterSpacing: '0.12em' })
-  );
-  const focusRingClass = css({
-    position: 'absolute',
-    width: '78px',
-    height: '78px',
-    borderRadius: '999px',
-    borderWidth: '2px',
-    borderColor: 'accent',
-    pointerEvents: 'none',
-    mixBlendMode: 'screen',
-    transform: 'translate(-50%, -50%)'
-  });
-  const hudHostClass = css({
-    position: 'absolute',
-    top: '1rem',
-    right: '1rem'
-  });
-  const indicatorWrap = css({
-    marginTop: '2rem'
-  });
-  const portalMaskClass = css({
-    position: 'fixed',
-    width: '48px',
-    height: '48px',
-    borderRadius: '999px',
-    borderWidth: '1px',
-    borderColor: 'accent',
+    justifyContent: 'center',
+    overflow: 'hidden',
     opacity: 0,
-    pointerEvents: 'none',
-    zIndex: 12,
-    transform: 'translate(-50%, -50%)',
-    mixBlendMode: 'screen',
-    backgroundColor: 'rgba(15, 23, 26, 0.5)'
+    visibility: 'hidden',
+    // Zoom-out transition: starts full, contracts to center on exit
+    clipPath: 'circle(150% at 50% 50%)'
+  });
+
+  const contentGridClass = css({
+    display: 'grid',
+    gridTemplateColumns: { base: '1fr', lg: '1.4fr 1fr' },
+    gap: { base: '0', lg: '2rem' },
+    alignItems: 'center',
+    marginTop: '1.5rem'
+  });
+
+  const viewportWrapperClass = css({
+    position: 'relative'
+  });
+
+  const indicatorWrap = css({
+    marginTop: '1.5rem',
+    display: 'flex',
+    justifyContent: 'center'
+  });
+
+  // Info panel styles for mobile layout
+  const infoPanelMobileClass = css({
+    display: { base: 'flex', lg: 'none' },
+    flexDirection: 'column',
+    gap: '0.75rem',
+    marginTop: '1.25rem',
+    padding: '1.25rem',
+    backgroundColor: 'rgba(15, 23, 26, 0.85)',
+    borderWidth: '1px',
+    borderStyle: 'solid',
+    borderColor: 'coverOfNight',
+    borderRadius: '4px'
+  });
+
+  // Info panel styles for desktop layout
+  const infoPanelDesktopClass = css({
+    display: { base: 'none', lg: 'flex' },
+    flexDirection: 'column',
+    gap: '1rem',
+    padding: '2rem',
+    backgroundColor: 'rgba(15, 23, 26, 0.85)',
+    borderWidth: '1px',
+    borderStyle: 'solid',
+    borderColor: 'coverOfNight',
+    borderRadius: '4px',
+    alignSelf: 'center'
   });
 </script>
 
 <section bind:this={root} class={sectionClass} id="film-stories">
   <SectionLabel prefix="Film" title="Field Stories" />
 
-  <div class={viewportClass} bind:this={viewport}>
-    {#each stories as story, index}
-      <article class={cardClass} bind:this={story.ref}>
-        <div class={mediaClass} bind:this={story.mediaRef}>
-          <video class={videoClass} autoplay muted loop playsinline>
-            {#each getVideoSources(story.src) as source}
-              <source src={source.src} type={source.type} />
-            {/each}
-          </video>
-        </div>
-        <h2 class={titleClass}>{story.title}</h2>
-      </article>
-    {/each}
+  <div class={contentGridClass} bind:this={contentGrid}>
+    <!-- Video Viewport -->
+    <div class={viewportWrapperClass}>
+      <div class={filmStoryViewport()} bind:this={viewport}>
+        {#each stories as story, index}
+          <article class={filmStoryCard()} bind:this={story.ref}>
+            <div bind:this={story.mediaRef} style="width: 100%; height: 100%;">
+              <video class={filmStoryMedia()} autoplay muted loop playsinline>
+                {#each getVideoSources(story.src) as source}
+                  <source src={source.src} type={source.type} />
+                {/each}
+              </video>
+            </div>
+          </article>
+        {/each}
 
-    <div class={focusRingClass} bind:this={focusRing}></div>
-    <div class={hudHostClass} bind:this={hudHost}>
-      <LensBug size={42} label="HUD" />
+        <div class={filmStoryFocusRing()} bind:this={focusRing}></div>
+      </div>
+
+      <!-- Mobile info panel (below video) -->
+      <div class={infoPanelMobileClass} bind:this={infoPanel}>
+        <h2 class={filmStoryTitle()} bind:this={mobileTitleRef}>{displayTitle}</h2>
+        <p class={filmStoryBody()} bind:this={mobileBodyRef}>{displayBody}</p>
+      </div>
+    </div>
+
+    <!-- Desktop info panel (right side) -->
+    <div class={infoPanelDesktopClass}>
+      <h2 class={filmStoryTitle({ size: 'lg' })} bind:this={desktopTitleRef}>{displayTitle}</h2>
+      <p class={filmStoryBody()} bind:this={desktopBodyRef}>{displayBody}</p>
     </div>
   </div>
 
   <div class={indicatorWrap}>
     <StepIndicator steps={steps} activeIndex={activeIndex} />
   </div>
-
-  <div class={portalMaskClass} bind:this={portalMask} aria-hidden="true"></div>
 </section>

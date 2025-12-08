@@ -1,26 +1,30 @@
 <script lang="ts">
-  import { createEventDispatcher, getContext, onDestroy, onMount, tick } from 'svelte';
+  import { getContext, onDestroy, onMount, tick } from 'svelte';
   import { css, cx } from '$styled-system/css';
   import { heading, body } from '$styled-system/recipes';
   import { layout } from '$design/system';
-import { gsap, brandEase, SCROLL_ORCHESTRATOR_CONTEXT_KEY, type ScrollOrchestrator } from '$lib/motion';
+  import { gsap, brandEase, SCROLL_ORCHESTRATOR_CONTEXT_KEY, type ScrollOrchestrator, masterScrollController } from '$lib/motion';
   import SectionLabel from './SectionLabel.svelte';
   import { getVideoSources } from '$lib/utils/video';
   import StepIndicator from './StepIndicator.svelte';
+  import { successfulClimbs, unsuccessfulClimbs, formatStatLine } from '$lib/data/climbing-stats';
 
   let root: HTMLElement;
   let successBlock: HTMLElement;
   let failBlock: HTMLElement;
   let focusRing: HTMLDivElement | null = null;
-  let portalMask: HTMLDivElement | null = null;
   let activeIndex = 0;
-  const dispatch = createEventDispatcher<{ 'stats:exit': { focusRect: DOMRect } }>();
+  let sectionCleanup: (() => void) | null = null;
 
   const sectionClass = css({
-    position: 'relative',
-    minHeight: '100vh',
+    position: 'absolute',
+    inset: 0,
     overflow: 'hidden',
-    color: 'text'
+    color: 'text',
+    opacity: 0,
+    visibility: 'hidden',
+    // Zoom-out transition: starts full, contracts to center on exit
+    clipPath: 'circle(150% at 50% 50%)'
   });
   const bgClass = css({
     position: 'absolute',
@@ -83,20 +87,6 @@ import { gsap, brandEase, SCROLL_ORCHESTRATOR_CONTEXT_KEY, type ScrollOrchestrat
     transform: 'translate(-50%, -50%)'
   });
   const steps = ['Summits', 'Setbacks'];
-  const portalMaskClass = css({
-    position: 'fixed',
-    width: '48px',
-    height: '48px',
-    borderRadius: '999px',
-    borderWidth: '1px',
-    borderColor: 'accent',
-    opacity: 0,
-    pointerEvents: 'none',
-    mixBlendMode: 'screen',
-    zIndex: 14,
-    transform: 'translate(-50%, -50%)',
-    backgroundColor: 'rgba(15, 23, 26, 0.5)'
-  });
 
 const orchestrator =
   getContext<ScrollOrchestrator | undefined>(SCROLL_ORCHESTRATOR_CONTEXT_KEY);
@@ -120,6 +110,9 @@ function moveRing(target: HTMLElement | null, immediate = false) {
 }
 
   function cleanupTimeline() {
+    // Clean up master scroll subscriptions and parallax registration
+    sectionCleanup?.();
+    sectionCleanup = null;
     timeline?.kill();
     timeline = null;
     timelineDisposer?.();
@@ -140,16 +133,25 @@ function moveRing(target: HTMLElement | null, immediate = false) {
       gsap.set(failBlock, { clipPath: 'circle(0% at 50% 50%)', opacity: 0 });
       moveRing(successBlock, true);
 
+      // Create paused timeline - controlled by master scroll controller
       const tl = gsap.timeline({
         defaults: { ease: 'none' },
-        scrollTrigger: {
-          trigger: root,
-          start: 'top top',
-          end: '+=160%',
-          scrub: true,
-          pin: true
-        }
+        paused: true
       });
+
+      // Register with master scroll controller for progress updates
+      const unsubscribeMaster = masterScrollController.onSectionProgress('photoStats', (progress, isActive) => {
+        tl.progress(progress);
+      });
+
+      // Register section element with master controller
+      const unregisterSection = masterScrollController.registerSection('photoStats', root, tl);
+
+      // Store cleanup
+      (tl as any).__masterCleanup = () => {
+        unsubscribeMaster();
+        unregisterSection();
+      };
 
       tl
         .to({}, { duration: 0.5 })
@@ -172,25 +174,20 @@ function moveRing(target: HTMLElement | null, immediate = false) {
         .call(() => {
           activeIndex = 1;
           moveRing(failBlock);
-          const rect = failBlock?.getBoundingClientRect();
-          if (rect && portalMask) {
-            const x = rect.left + rect.width * 0.7;
-            const y = rect.top + rect.height * 0.3;
-            gsap.set(portalMask, { left: x, top: y, width: 32, height: 32, opacity: 1 });
-            gsap.to(portalMask, {
-              width: rect.width * 1.6,
-              height: rect.width * 1.6,
-              duration: 0.5,
-              ease: brandEase,
-              onComplete: () => {
-                portalMask && gsap.set(portalMask, { opacity: 0 });
-                dispatch('stats:exit', { focusRect: rect });
-              }
-            });
-          }
         }, undefined, 0.95);
 
       timeline = tl;
+
+      // Register parallax targets for zoom-out transitions
+      const parallaxTargets = [successBlock, failBlock, focusRing].filter(Boolean) as HTMLElement[];
+      const unregisterParallax = masterScrollController.registerParallaxTargets('photoStats', parallaxTargets);
+
+      // Store cleanup
+      sectionCleanup = () => {
+        (tl as any).__masterCleanup?.();
+        unregisterParallax();
+      };
+
       if (orchestrator) {
         timelineDisposer = orchestrator.registerSectionTimeline('photo-stats', () => tl);
       }
@@ -217,16 +214,16 @@ function moveRing(target: HTMLElement | null, immediate = false) {
 
     <div class={cardClass}>
       <div class={panelClass} bind:this={successBlock}>
-        <h2 class={panelHeading}>Successful climbs</h2>
-        <p class={panelBody}>8000M EVEREST x2 / K2 / MANASLU</p>
-        <p class={panelBody}>7000M MT NOSHAQ</p>
-        <p class={panelBody}>6000M MERA PEAK</p>
+        <h2 class={panelHeading}>{successfulClimbs.title}</h2>
+        {#each successfulClimbs.lines as line}
+          <p class={panelBody}>{formatStatLine(line)}</p>
+        {/each}
       </div>
       <div class={cx(panelClass, hiddenPanel)} bind:this={failBlock}>
-        <h2 class={panelHeading}>Unsuccessful climbs</h2>
-        <p class={panelBody}>8000M DHAULAGIRI / K2 WINTER / CHO OYU</p>
-        <p class={panelBody}>6000M MT LOGAN</p>
-        <p class={panelBody}>5000M KOH E PAMIR</p>
+        <h2 class={panelHeading}>{unsuccessfulClimbs.title}</h2>
+        {#each unsuccessfulClimbs.lines as line}
+          <p class={panelBody}>{formatStatLine(line)}</p>
+        {/each}
       </div>
       <div class={focusRingClass} bind:this={focusRing} aria-hidden="true"></div>
     </div>
@@ -234,6 +231,4 @@ function moveRing(target: HTMLElement | null, immediate = false) {
       <StepIndicator steps={steps} activeIndex={activeIndex} />
     </div>
   </div>
-
-  <div class={portalMaskClass} bind:this={portalMask} aria-hidden="true"></div>
 </section>

@@ -10,18 +10,19 @@
   import { getVideoSources } from '$lib/utils/video';
   import { initBigFilmMotion } from '$lib/sections/BigFilmSection.motion';
   import { lensElement, lensAttachment } from '$lib/motion/lensTimeline';
+  import LensBarrelOverlay from './LensBarrelOverlay.svelte';
+  import ConcentricCircles from './ConcentricCircles.svelte';
   import {
     SCROLL_ORCHESTRATOR_CONTEXT_KEY,
-    type ScrollOrchestrator
+    type ScrollOrchestrator,
+    gsap,
+    masterScrollController
   } from '$lib/motion';
-  import { createEventDispatcher } from 'svelte';
 
   export let filmPortalReady = false;
 
   const orchestrator =
     getContext<ScrollOrchestrator | undefined>(SCROLL_ORCHESTRATOR_CONTEXT_KEY);
-  type FilmExitDetail = { focusRect: DOMRect };
-  const dispatch = createEventDispatcher<{ 'film:exit': FilmExitDetail }>();
 
   let root: HTMLElement;
   let viewport: HTMLElement;
@@ -31,14 +32,26 @@
   let mounted = false;
   let initializingMotion = false;
   let motionCleanup: (() => void) | null = null;
+  let sectionCleanup: (() => void) | null = null;
 
   let activeIndex = 0;
-  let lastPortalDetail: FilmExitDetail | null = null;
   let mediaNodes: HTMLElement[] = [];
   let videoNodes: Array<HTMLVideoElement | null> = [];
+  let slabEyebrowEl: HTMLElement;
+  let slabTitleEl: HTMLElement;
+  let slabBodyEl: HTMLElement;
+  let slabMetaEl: HTMLElement;
 
   let lensNode: HTMLElement | null = null;
   let lensOwner: string | null = null;
+
+  // Lens barrel overlay state (Framework 2 §3.2)
+  let lensBarrelVisible = false;
+  let lensBarrelLabel = '';
+
+  // Concentric circles for exit transition (Framework 2 §3.6)
+  let concentricVisible = false;
+  let concentricScale = 1;
 
   const lensElementUnsub = lensElement.subscribe((node) => {
     lensNode = node;
@@ -103,12 +116,6 @@
     });
   }
 
-  function handlePortalReady(detail: FilmExitDetail) {
-    console.debug('[big-film] portal ready detail', detail.focusRect?.width ?? null, detail.focusRect?.height ?? null);
-    lastPortalDetail = detail;
-    dispatch('film:exit', detail);
-  }
-
   async function bootstrapMotion() {
     if (initializingMotion || motionCleanup || !filmPortalReady) {
       console.debug(
@@ -131,30 +138,73 @@
       initializingMotion = false;
       return;
     }
+    // NOTE: Section visibility is controlled by masterScrollController.applySectionVisibility()
+    // No manual gsap.set(root, { autoAlpha: 1 }) needed here
     resetVideos(0);
-    lastPortalDetail = null;
+    // Collect slab text lines for staggered animation (Framework 2 spec: 50-80ms stagger)
+    const slabLines = [slabEyebrowEl, slabTitleEl, slabBodyEl, slabMetaEl].filter(Boolean);
+
     motionCleanup = initBigFilmMotion({
       root,
       viewport,
       slab,
+      slabLines,
       mediaNodes,
       labelElement: labelHost,
       previewStories: filmStories,
+      // Framework 3 §3.2: Film cards for entry reel strip animation
+      filmCards,
       orchestrator,
       onStepChange: handleStepChange,
       onComplete: () => {
-        if (lastPortalDetail) {
-          dispatch('film:exit', lastPortalDetail);
-        }
+        console.debug('[big-film] timeline complete');
       },
-      onPortalReady: handlePortalReady
+      // Framework 2 §3.2: Lens barrel callbacks
+      onLensBarrelShow: (label: string) => {
+        lensBarrelLabel = label;
+        lensBarrelVisible = true;
+      },
+      onLensBarrelHide: () => {
+        lensBarrelVisible = false;
+      },
+      // Framework 2 §3.6: Concentric circles callbacks
+      onConcentricShow: (scale: number) => {
+        concentricScale = scale;
+        concentricVisible = true;
+      },
+      onConcentricHide: () => {
+        concentricVisible = false;
+      }
     });
+
+    // Register parallax targets for zoom-out transitions
+    // NOTE: Section element is registered in onMount for immediate visibility control
+    const unregisterParallax = masterScrollController.registerParallaxTargets('bigFilm', [
+      viewport,
+      slab,
+      ...slabLines
+    ].filter(Boolean) as HTMLElement[]);
+
+    // Store cleanup for parallax registration
+    const prevCleanup = motionCleanup;
+    motionCleanup = () => {
+      prevCleanup?.();
+      unregisterParallax();
+    };
+
     console.debug('[big-film] motion initialized', 'mediaNodes', mediaNodes.length);
     initializingMotion = false;
   }
 
   onMount(() => {
     mounted = true;
+
+    // CRITICAL: Register section element IMMEDIATELY for visibility control
+    // This is separate from timeline registration which happens in bootstrapMotion()
+    // GSAP best practice: element registration on mount, timeline registration when ready
+    sectionCleanup = masterScrollController.registerSection('bigFilm', root);
+    console.debug('[big-film] registered section element for visibility control');
+
     if (filmPortalReady) {
       bootstrapMotion();
     }
@@ -166,8 +216,10 @@
 
   onDestroy(() => {
     motionCleanup?.();
+    sectionCleanup?.();
     console.debug('[big-film] destroyed');
     motionCleanup = null;
+    sectionCleanup = null;
     lensElementUnsub();
     lensAttachmentUnsub();
   });
@@ -177,21 +229,27 @@
   $: currentCard = filmCards[activeIndex] ?? filmCards[0];
 
   const sectionClass = css({
-    position: 'relative',
-    minHeight: '100vh',
+    position: 'absolute',
+    inset: 0,
     px: { base: layout.safeX.base, md: layout.safeX.md, lg: layout.safeX.lg },
     py: { base: '4rem', md: '5rem', lg: '6rem' },
     display: 'flex',
     flexDirection: 'column',
+    justifyContent: 'center',
     gap: '2.5rem',
-    color: 'text'
+    color: 'text',
+    overflow: 'hidden',
+    opacity: 0,
+    visibility: 'hidden',
+    // Zoom-out transition: starts full, contracts to center on exit
+    clipPath: 'circle(150% at 50% 50%)'
   });
 
   const grid = css({
     display: 'grid',
     gap: { base: '2rem', md: '2.5rem', lg: '3rem' },
     alignItems: 'start',
-    gridTemplateColumns: { base: '1fr', lg: '1.15fr 0.85fr' }
+    gridTemplateColumns: { base: '1fr', lg: '0.95fr 1.05fr' }
   });
 
   const viewportClass = css({
@@ -320,16 +378,22 @@
       {/each}
 
       <div class={hudClass} bind:this={hudHost}></div>
+
+      <!-- Framework 2 §3.2: Lens barrel overlay with tick marks -->
+      <LensBarrelOverlay visible={lensBarrelVisible} label={lensBarrelLabel} />
+
+      <!-- Framework 2 §3.6: Concentric circles for exit transition -->
+      <ConcentricCircles visible={concentricVisible} scale={concentricScale} ringCount={4} />
     </div>
 
     <div class={slabWrap}>
       <article class={slabClass} bind:this={slab}>
-        <p class={slabEyebrow}>High altitude features</p>
-        <h3 class={slabTitle}>{currentCard.title}</h3>
-        <p class={slabBody}>{currentCard.description}</p>
+        <p class={slabEyebrow} bind:this={slabEyebrowEl}>High altitude features</p>
+        <h3 class={slabTitle} bind:this={slabTitleEl}>{currentCard.title}</h3>
+        <p class={slabBody} bind:this={slabBodyEl}>{currentCard.description}</p>
 
         {#if currentCard.metadata}
-          <p class={metaList}>
+          <p class={metaList} bind:this={slabMetaEl}>
             {#each currentCard.metadata as meta}
               <span>{meta}</span>
             {/each}

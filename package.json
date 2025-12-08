@@ -28,7 +28,10 @@
 		"@fontsource/ibm-plex-sans": "^5.2.8",
 		"@fontsource/oswald": "^5.2.8",
 		"@threlte/core": "^8.3.1",
+		"@threlte/extras": "^9.7.1",
+		"@tweakpane/core": "^2.0.5",
 		"gsap": "^3.13.0",
-		"three": "^0.181.2"
+		"three": "^0.181.2",
+		"tweakpane": "^4.0.5"
 	}
 }
