@@ -1,5 +1,11 @@
 import { defineConfig } from '@pandacss/dev';
 
+/**
+ * Font Stacks - Brand Design System alignment:
+ * - Display: Trade Gothic Next Condensed Bold (spec) → Oswald 600 (production fallback)
+ *   Oswald is loaded via @fontsource as the condensed sans-serif substitute
+ * - Body: IBM Plex Sans Regular/Medium (spec) → loaded via @fontsource 400/500
+ */
 const fonts = {
   trade: {
     value: '"Trade Gothic Next", "Trade Gothic", "Oswald", system-ui, sans-serif'

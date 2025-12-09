@@ -10,6 +10,8 @@
   import MainScroll from '$lib/components/MainScroll.svelte';
   import PortalOverlay from '$lib/components/PortalOverlay.svelte';
   import GridFlipOverlay from '$lib/components/GridFlipOverlay.svelte';
+  import CameraZoomOutOverlay from '$lib/components/CameraZoomOutOverlay.svelte';
+  import StatsToAboutPortal from '$lib/components/StatsToAboutPortal.svelte';
 
   // Logos → BigFilm: Netflix expand (kept)
   let filmPortalReady = false;
@@ -18,10 +20,9 @@
   }
 
   // About → Services: Grid flip (kept)
-  type ServicesInstance = InstanceType<typeof ServicesSection>;
-  type FinalContactInstance = InstanceType<typeof FinalContactSection>;
-  let servicesRef: ServicesInstance | null = null;
-  let finalContactRef: FinalContactInstance | null = null;
+  // Component refs with exported methods
+  let servicesRef: { receivePortalIntro: (detail?: { focusRect?: DOMRect }) => void } | null = null;
+  let finalContactRef: { receivePortalIntro: (detail?: { focusRect?: DOMRect }) => void } | null = null;
 
   function handleAboutExit(event: CustomEvent<{ focusRect: DOMRect }>) {
     servicesRef?.receivePortalIntro(event.detail);
@@ -51,5 +52,7 @@
   <FinalContactSection bind:this={finalContactRef} />
 </MainScroll>
 
+<StatsToAboutPortal />
 <GridFlipOverlay />
+<CameraZoomOutOverlay />
 <PortalOverlay />

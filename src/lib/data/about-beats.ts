@@ -3,6 +3,8 @@
  * Framework 4 §1: Three narrative beats for the About Me section
  */
 
+import { serviceCredits } from './services';
+
 export type BeatBackground = {
   mobile: string;
   desktop?: string;
@@ -32,7 +34,9 @@ export const aboutBeats: Beat[] = [
     ],
     background: {
       mobile: '/pictures/heli rescue (1 of 2).jpg',
-      desktop: '/pictures/EVEREST CLEAN (1 of 2).jpg'
+      desktop: '/pictures/EVEREST CLEAN (1 of 2).jpg',
+      // Framework 4 §3.1: "Still or subtle clip from Everest/K2, or summit shot"
+      video: '/videos/showreel.mp4'
     }
   },
   {
@@ -56,7 +60,9 @@ export const aboutBeats: Beat[] = [
     ],
     background: {
       mobile: '/pictures/Film Himal Sicker 01.jpg',
-      desktop: '/pictures/earth puja (21 of 45).JPG'
+      desktop: '/pictures/earth puja (21 of 45).JPG',
+      // Framework 4 §3.3: "More human shot (camp with people, community, or sunrise)"
+      video: '/videos/short-film-harbor.mp4'
     }
   }
 ];
@@ -70,10 +76,7 @@ export const valuesStaggerLines = {
   line2: 'are slowly being collected on my YouTube channel.'
 };
 
-/** Ghost grid labels for exit transition (Framework 4 §6) */
-export const servicesGhostLabels = [
-  'Mountain DOP',
-  'Exped Photography',
-  'Aerial Cinema',
-  'Stock Footage'
-];
+/** Ghost grid labels derived from services data (Framework 4 §6) */
+export const servicesGhostLabels = serviceCredits.map(s =>
+  s.label.replace('& Product Photography', 'Photography').replace('Cinematography', 'Cinema')
+);

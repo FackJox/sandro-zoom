@@ -51,7 +51,13 @@
   let timelineCleanup: (() => void) | null = null;
   let sectionCleanup: (() => void) | null = null;
 
+  // Video refs for resource management
+  let videoRefs: HTMLVideoElement[] = [];
+
   const orchestrator = getContext<ScrollOrchestrator | undefined>(SCROLL_ORCHESTRATOR_CONTEXT_KEY);
+
+  // Scroll hint text based on active beat
+  $: scrollHintText = activeIndex < 2 ? 'Next story' : 'Services';
 
   // ─────────────────────────────────────────────────────────────────
   // CSS Classes - Layout
@@ -79,11 +85,11 @@
   });
 
   // Beat container - full viewport, stacked
+  // Note: visibility controlled by mask-image in AboutSection.motion.ts (Framework 4 §5.2)
   const beatContainer = css({
     position: 'absolute',
     inset: 0,
-    opacity: 0,
-    clipPath: 'circle(0% at 50% 50%)'
+    opacity: 0
   });
 
   // Background layer for mobile (full-bleed)
@@ -288,6 +294,15 @@
       valuesLine2,
       orchestrator,
       onActiveIndexChange: (index) => {
+        // Pause videos from previous beat, play current beat's video
+        videoRefs.forEach((video, i) => {
+          if (!video) return;
+          if (i === index) {
+            video.play().catch(() => {/* Autoplay may be blocked */});
+          } else {
+            video.pause();
+          }
+        });
         activeIndex = index;
       },
       onExitDispatch: (focusRect) => {
@@ -342,7 +357,15 @@
         <!-- Left: Media column (desktop only) -->
         <div class={mediaColumn}>
           {#if beat.background.video}
-            <video class={mediaFill} bind:this={beat.mediaRef} autoplay muted loop playsinline>
+            <video
+              class={mediaFill}
+              bind:this={beat.mediaRef}
+              on:loadeddata={() => { videoRefs[index] = beat.mediaRef as unknown as HTMLVideoElement; }}
+              autoplay={index === 0}
+              muted
+              loop
+              playsinline
+            >
               {#each getVideoSources(beat.background.video) as source}
                 <source src={source.src} type={source.type} />
               {/each}
@@ -379,7 +402,7 @@
   {/each}
 
   <!-- Scroll hint (mobile) -->
-  <div class={scrollHint}>Next story</div>
+  <div class={scrollHint}>{scrollHintText}</div>
 
   <!-- Step indicator -->
   <div class={indicatorWrap}>

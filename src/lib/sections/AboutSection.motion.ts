@@ -1,10 +1,62 @@
 /**
  * About Section Motion Logic
  * Framework 4 §5-6: Beat transitions and exit portal animations
+ *
+ * Beat transitions use inside/outside mask separation:
+ * - Inside the circle: incoming beat content fades in
+ * - Outside the circle: current beat content fades out
  */
 
 import { gsap, brandEase, type ScrollOrchestrator, masterScrollController } from '$lib/motion';
 import type { Beat } from '$lib/data/about-beats';
+
+// ─────────────────────────────────────────────────────────────────
+// Mask Helpers (Framework 4 §5.2 - inside/outside separation)
+// ─────────────────────────────────────────────────────────────────
+
+/**
+ * Generate a filled circle mask (content visible inside the circle)
+ * Used for incoming beat - shows center, hides edges
+ */
+function getInsideCircleMask(radiusPercent: number): string {
+  if (radiusPercent <= 0) {
+    return 'radial-gradient(circle at 50% 50%, transparent 0%, transparent 100%)';
+  }
+  return `radial-gradient(circle at 50% 50%, black 0%, black ${radiusPercent}%, transparent ${radiusPercent}%)`;
+}
+
+/**
+ * Generate an inverted circle mask (content visible outside the circle)
+ * Used for outgoing beat - hides center, shows edges
+ */
+function getOutsideCircleMask(innerRadius: number, outerRadius: number = 150): string {
+  if (innerRadius <= 0) {
+    // No hole - fully visible
+    return `radial-gradient(circle at 50% 50%, black 0%, black ${outerRadius}%, transparent ${outerRadius}%)`;
+  }
+  if (innerRadius >= outerRadius) {
+    // Fully transparent
+    return 'radial-gradient(circle at 50% 50%, transparent 0%, transparent 100%)';
+  }
+  // Ring mask - transparent center, visible ring, transparent outside
+  return `radial-gradient(circle at 50% 50%, transparent 0%, transparent ${innerRadius}%, black ${innerRadius}%, black ${outerRadius}%, transparent ${outerRadius}%)`;
+}
+
+/**
+ * Apply mask-image with webkit prefix for cross-browser support
+ */
+function applyMask(element: HTMLElement, mask: string): void {
+  element.style.maskImage = mask;
+  element.style.webkitMaskImage = mask;
+}
+
+/**
+ * Clear mask from element
+ */
+function clearMask(element: HTMLElement): void {
+  element.style.maskImage = '';
+  element.style.webkitMaskImage = '';
+}
 
 // ─────────────────────────────────────────────────────────────────
 // Types
@@ -46,6 +98,25 @@ export interface PortalIntroOptions {
 // Focus Ring Helper
 // ─────────────────────────────────────────────────────────────────
 
+/**
+ * Calculate the center position of a target element relative to root
+ */
+function getRingTargetPosition(
+  target: HTMLElement,
+  root: HTMLElement
+): { x: number; y: number } {
+  const rect = target.getBoundingClientRect();
+  const rootRect = root.getBoundingClientRect();
+  // Position at center-right of the element for better visibility
+  return {
+    x: rect.left - rootRect.left + rect.width * 0.75,
+    y: rect.top - rootRect.top + rect.height * 0.35
+  };
+}
+
+/**
+ * Move focus ring to target element
+ */
 export function moveRing(
   focusRing: HTMLDivElement | null,
   target: HTMLElement | null,
@@ -53,16 +124,44 @@ export function moveRing(
   immediate = false
 ): void {
   if (!target || !focusRing) return;
-  const rect = target.getBoundingClientRect();
-  const rootRect = root.getBoundingClientRect();
-  const x = rect.left - rootRect.left + rect.width * 0.75;
-  const y = rect.top - rootRect.top + rect.height * 0.25;
+  const { x, y } = getRingTargetPosition(target, root);
   gsap.to(focusRing, {
     x,
     y,
     duration: immediate ? 0 : 0.4,
     ease: brandEase
   });
+}
+
+/**
+ * Animate focus ring traveling from one beat to another (Framework 4 §5.2)
+ * Creates a smooth path animation during beat transitions
+ */
+export function animateRingBetweenBeats(
+  focusRing: HTMLDivElement | null,
+  fromBeat: HTMLElement | null,
+  toBeat: HTMLElement | null,
+  root: HTMLElement,
+  timeline: gsap.core.Timeline,
+  startTime: number,
+  duration: number
+): void {
+  if (!focusRing || !fromBeat || !toBeat) return;
+
+  const fromPos = getRingTargetPosition(fromBeat, root);
+  const toPos = getRingTargetPosition(toBeat, root);
+
+  // Animate the ring traveling from current to next beat
+  timeline.fromTo(focusRing,
+    { x: fromPos.x, y: fromPos.y },
+    {
+      x: toPos.x,
+      y: toPos.y,
+      duration: duration,
+      ease: brandEase
+    },
+    startTime
+  );
 }
 
 // ─────────────────────────────────────────────────────────────────
@@ -195,10 +294,16 @@ export function initAboutTimeline(options: AboutMotionOptions): () => void {
 
   beats.forEach((beat, index) => {
     if (!beat.ref) return;
+    // Use mask-image for consistent behavior with transitions
     gsap.set(beat.ref, {
-      autoAlpha: shouldBeVisible && index === 0 ? 1 : 0,
-      clipPath: index === 0 ? 'circle(140% at 50% 50%)' : 'circle(0% at 50% 50%)'
+      autoAlpha: shouldBeVisible && index === 0 ? 1 : 0
     });
+    // First beat fully visible (no mask), others hidden
+    if (index === 0) {
+      clearMask(beat.ref);
+    } else {
+      applyMask(beat.ref, getInsideCircleMask(0));
+    }
   });
 
   // Initial ring position
@@ -215,6 +320,7 @@ export function initAboutTimeline(options: AboutMotionOptions): () => void {
       // Transition starts at end of current beat's segment
       const transitionStart = (i + 0.85) * beatDuration;
       const softFocusStart = transitionStart - 0.04;
+      const transitionDuration = 0.12;
 
       // Phase 1: Soft focus on current scene (Framework 4 §5.2)
       if (beat.textRef) {
@@ -246,64 +352,117 @@ export function initAboutTimeline(options: AboutMotionOptions): () => void {
         }, softFocusStart);
       }
 
-      // Phase 2: Focus ring pulses during transition
-      if (focusRing) {
+      // Phase 2: Focus ring travels between beats (Framework 4 §5.2)
+      if (focusRing && beat.ref && next.ref) {
+        // Pulse at start of transition
         tl.to(focusRing, {
           scale: 1.3,
           opacity: 0.9,
-          duration: 0.04
+          duration: 0.03
         }, transitionStart);
+
+        // Animate ring traveling from current beat to next beat
+        animateRingBetweenBeats(
+          focusRing,
+          beat.ref,
+          next.ref,
+          root,
+          tl,
+          transitionStart + 0.03,
+          transitionDuration - 0.03
+        );
+
+        // Settle ring at destination
         tl.to(focusRing, {
           scale: 1,
           opacity: 0.6,
-          duration: 0.06
-        }, transitionStart + 0.06);
+          duration: 0.04
+        }, transitionStart + transitionDuration);
       }
 
-      // Phase 3: Current beat fades out with blur
-      tl.to(beat.ref, {
-        clipPath: 'circle(0% at 50% 50%)',
-        autoAlpha: 0,
-        duration: 0.12
+      // Phase 3: Inside/Outside mask transition (Framework 4 §5.2)
+      // Current beat: shows OUTSIDE (edges fade out as center grows transparent)
+      // Incoming beat: shows INSIDE (center visible, grows to fill)
+
+      // Proxy objects for animating mask radii
+      const outgoingMask = { innerRadius: 0, outerRadius: 150 };
+      const incomingMask = { radius: 0 };
+
+      // Make incoming beat visible but masked to nothing initially
+      tl.set(next.ref, { autoAlpha: 1 }, transitionStart);
+      tl.set(next.ref, {
+        onComplete: () => applyMask(next.ref!, getInsideCircleMask(0))
       }, transitionStart);
+
+      // Animate outgoing beat: center becomes transparent (ring grows)
+      tl.to(outgoingMask, {
+        innerRadius: 100,
+        outerRadius: 150,
+        duration: transitionDuration,
+        ease: 'power2.inOut',
+        onUpdate: () => {
+          if (beat.ref) {
+            applyMask(beat.ref, getOutsideCircleMask(outgoingMask.innerRadius, outgoingMask.outerRadius));
+          }
+        }
+      }, transitionStart);
+
+      // Animate incoming beat: visible center grows from 0 to fill
+      tl.to(incomingMask, {
+        radius: 140,
+        duration: transitionDuration,
+        ease: 'power2.inOut',
+        onUpdate: () => {
+          if (next.ref) {
+            applyMask(next.ref, getInsideCircleMask(incomingMask.radius));
+          }
+        }
+      }, transitionStart);
+
+      // At transition end: hide outgoing, clear masks
+      tl.set(beat.ref, { autoAlpha: 0 }, transitionStart + transitionDuration);
+      tl.call(() => {
+        if (beat.ref) clearMask(beat.ref);
+        if (next.ref) clearMask(next.ref);
+      }, undefined, transitionStart + transitionDuration + 0.01);
 
       // Reset blur and transforms on outgoing elements
       if (beat.textRef) {
-        tl.set(beat.textRef, { filter: 'blur(0px)' }, transitionStart + 0.12);
+        tl.set(beat.textRef, { filter: 'blur(0px)' }, transitionStart + transitionDuration);
       }
       if (beat.bgRef) {
-        tl.set(beat.bgRef, { scale: 1, x: 0 }, transitionStart + 0.12);
+        tl.set(beat.bgRef, { scale: 1, x: 0 }, transitionStart + transitionDuration);
       }
       if (beat.mediaRef) {
-        tl.set(beat.mediaRef, { scale: 1, x: 0, y: 0 }, transitionStart + 0.12);
+        tl.set(beat.mediaRef, { scale: 1, x: 0, y: 0 }, transitionStart + transitionDuration);
       }
 
-      // Phase 4: Next beat fades in
-      tl.fromTo(next.ref,
-        { clipPath: 'circle(0% at 50% 50%)', autoAlpha: 0 },
-        { clipPath: 'circle(140% at 50% 50%)', autoAlpha: 1, duration: 0.15 },
-        transitionStart + 0.02
-      );
-
-      // Beat 3 (Values) special stagger animation (Framework 4 §5.3)
-      if (i === 1 && valuesLine1 && valuesLine2) {
-        gsap.set(valuesLine1, { opacity: 0 });
-        gsap.set(valuesLine2, { opacity: 0, y: 30 });
-
-        tl.to(valuesLine1, {
-          opacity: 1,
-          duration: 0.08
-        }, transitionStart + 0.10);
-
-        tl.to(valuesLine2, {
-          opacity: 1,
-          y: 0,
-          duration: 0.12,
-          ease: brandEase
-        }, transitionStart + 0.14);
-      }
     }
   });
+
+  // Beat 3 (Values) special stagger animation (Framework 4 §5.3)
+  // Triggers AFTER beat 3 is fully visible, not during transition
+  if (valuesLine1 && valuesLine2) {
+    gsap.set(valuesLine1, { opacity: 0 });
+    gsap.set(valuesLine2, { opacity: 0, y: 30 });
+
+    // Beat 3 starts at 0.66, fully revealed by ~0.72
+    // Stagger starts at 0.74 (after beat is settled)
+    const valuesRevealStart = 0.74;
+
+    tl.to(valuesLine1, {
+      opacity: 1,
+      duration: 0.05
+    }, valuesRevealStart);
+
+    // Line 2 slides up on "slight downward scroll" (spec)
+    tl.to(valuesLine2, {
+      opacity: 1,
+      y: 0,
+      duration: 0.08,
+      ease: brandEase
+    }, valuesRevealStart + 0.04);
+  }
 
   // Exit transition to Services (Framework 4 §6)
   const exitStart = 0.88;

@@ -7,6 +7,10 @@
   import { CameraRevealScene } from '$lib/components/camera';
   import { contactInfo } from '$lib/data/contact';
 
+  // Camera transform state for idle animation and pointer parallax
+  let cameraTransformOffset = $state({ x: 0, y: 0, rotateX: 0, rotateY: 0 });
+  let idleTimeline: gsap.core.Timeline | null = null;
+
   /**
    * FinalContactSection - 3D Camera Reveal
    *
@@ -55,6 +59,55 @@
       .to(portalMask, { opacity: 0, duration: 0.3 }, '>-0.15');
   }
 
+  /**
+   * Setup camera idle animation (Framework 5 §4.3)
+   * Subtle breathing motion - slow vertical bob
+   */
+  function setupIdleAnimation() {
+    // Check for reduced motion preference
+    if (typeof window !== 'undefined' && window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+      return;
+    }
+
+    idleTimeline = gsap.timeline({ repeat: -1, yoyo: true });
+    idleTimeline.to(cameraTransformOffset, {
+      y: 8,
+      rotateX: 0.5,
+      duration: 3,
+      ease: 'sine.inOut'
+    });
+  }
+
+  /**
+   * Handle pointer parallax for camera (Framework 5 §4.3)
+   * Camera moves slightly with mouse position on desktop
+   */
+  function handlePointerMove(event: MouseEvent) {
+    if (typeof window === 'undefined') return;
+
+    // Only apply parallax on desktop
+    if (window.innerWidth < 768) return;
+
+    // Check for reduced motion preference
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+
+    const centerX = window.innerWidth / 2;
+    const centerY = window.innerHeight / 2;
+
+    // Calculate offset from center (-1 to 1)
+    const offsetX = (event.clientX - centerX) / centerX;
+    const offsetY = (event.clientY - centerY) / centerY;
+
+    // Apply subtle parallax (few degrees of rotation)
+    gsap.to(cameraTransformOffset, {
+      rotateY: offsetX * 3,  // ±3 degrees
+      rotateX: -offsetY * 2, // ±2 degrees (inverted for natural feel)
+      duration: 0.5,
+      ease: 'power2.out',
+      overwrite: 'auto'
+    });
+  }
+
   onMount(async () => {
     await tick();
 
@@ -73,6 +126,11 @@
     // Register with master scroll controller for progress updates
     const unsubscribeMaster = masterScrollController.onSectionProgress('finalContact', (progress, isActive) => {
       tl.progress(progress);
+
+      // Start idle animation when section becomes active
+      if (isActive && !idleTimeline) {
+        setupIdleAnimation();
+      }
     });
 
     // Register section element with master controller
@@ -96,6 +154,11 @@
     if (orchestrator) {
       timelineDisposer = orchestrator.registerSectionTimeline('final-contact', () => tl);
     }
+
+    // Add pointer parallax listener
+    if (typeof window !== 'undefined') {
+      window.addEventListener('mousemove', handlePointerMove);
+    }
   });
 
   onDestroy(() => {
@@ -106,6 +169,13 @@
     timelineDisposer = null;
     portalTimeline?.kill();
     portalTimeline = null;
+    idleTimeline?.kill();
+    idleTimeline = null;
+
+    // Remove pointer parallax listener
+    if (typeof window !== 'undefined') {
+      window.removeEventListener('mousemove', handlePointerMove);
+    }
   });
 
   // Styles
@@ -125,8 +195,15 @@
   const sceneContainerClass = css({
     position: 'absolute',
     inset: 0,
-    zIndex: 0
+    zIndex: 0,
+    transformStyle: 'preserve-3d',
+    transition: 'transform 0.1s ease-out'
   });
+
+  // Compute scene container style with idle + parallax transforms
+  const sceneContainerStyle = $derived(
+    `transform: translateY(${cameraTransformOffset.y}px) rotateX(${cameraTransformOffset.rotateX}deg) rotateY(${cameraTransformOffset.rotateY}deg);`
+  );
 
   const contactClass = css({
     position: 'relative',
@@ -172,8 +249,8 @@
 </script>
 
 <section bind:this={root} class={sectionClass} id="final-contact">
-  <!-- 3D Camera Scene with LCD overlay -->
-  <div class={sceneContainerClass}>
+  <!-- 3D Camera Scene with LCD overlay (transforms for idle + parallax) -->
+  <div class={sceneContainerClass} style={sceneContainerStyle}>
     <CameraRevealScene />
   </div>
 

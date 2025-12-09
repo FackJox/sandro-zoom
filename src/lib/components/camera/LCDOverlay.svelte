@@ -1,6 +1,7 @@
 <script lang="ts">
   import { css } from '$styled-system/css';
   import { heading, body } from '$styled-system/recipes';
+  import { serviceCredits, servicesHeading } from '$lib/data/services';
 
   /**
    * LCDOverlay - CSS 3D positioned overlay for camera LCD screen
@@ -9,6 +10,7 @@
    * positioned via CSS 3D transforms to align with the camera's LCD.
    *
    * Transform props are exposed for debug adjustment.
+   * Uses centralized data from $lib/data/services.ts to avoid content drift.
    */
 
   interface Props {
@@ -37,13 +39,12 @@
     visible = true
   }: Props = $props();
 
-  // Frozen services credits content (matches ServicesSection layout)
-  const credits = [
-    'MOUNTAIN DOP',
-    'EXPED & PRODUCT PHOTOGRAPHY',
-    'AERIAL CINEMATOGRAPHY',
-    'STOCK FOOTAGE (SHUTTERSTOCK)'
-  ];
+  // Format credits from centralized data source (matches ServicesSection layout)
+  const credits = serviceCredits.map((credit) =>
+    credit.subtitle
+      ? `${credit.label} (${credit.subtitle})`.toUpperCase()
+      : credit.label.toUpperCase()
+  );
 
   const containerClass = css({
     position: 'absolute',
@@ -103,7 +104,7 @@
     "
   >
     <div class={lcdFrameClass}>
-      <span class={labelClass}>Services / Credits</span>
+      <span class={labelClass}>{servicesHeading}</span>
       {#each credits as credit}
         <p class={creditClass}>{credit}</p>
       {/each}

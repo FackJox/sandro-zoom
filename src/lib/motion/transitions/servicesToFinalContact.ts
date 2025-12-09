@@ -1,17 +1,18 @@
 import { gsap, brandEase } from '$lib/motion';
 
 /**
- * Services → FinalContact Transition (Placeholder)
+ * Services → FinalContact Transition
  *
- * Simplified version: portal mask expansion only.
+ * This module provides supplementary animation utilities for the Services → FinalContact transition.
+ * The main 3D camera zoom-out effect is implemented in CameraZoomOutOverlay.svelte.
  *
- * TODO: Future implementation per Framework 5 §3
- * - Services content becomes 3D plane
- * - Animates with perspective (rotateX, rotateY, translateZ)
- * - Shrinks and drifts down-right
- * - Becomes camera LCD screen
- * - 3D camera body reveals around it
- * - Scenic background appears behind camera
+ * Framework 5 §3 implementation:
+ * - CameraZoomOutOverlay handles the 3D plane animation (scale, rotate, translate)
+ * - Services content shrinks into camera LCD position
+ * - Camera body and scenic background are revealed
+ * - This module handles the final contact text entrance animation
+ *
+ * @see src/lib/components/CameraZoomOutOverlay.svelte for the main 3D transition
  */
 
 type ServicesToFinalContactOptions = {
@@ -25,11 +26,10 @@ type ServicesToFinalContactOptions = {
 };
 
 /**
- * Attach simplified portal transition from Services to FinalContact
+ * Attach entrance animation for FinalContact section
  *
- * This is a placeholder implementation. The full Framework 5 design
- * includes a 3D camera zoom-out effect where the services section
- * shrinks into a camera LCD screen.
+ * Called when Services section completes. Works in coordination with
+ * CameraZoomOutOverlay which handles the 3D camera reveal animation.
  */
 export function attachServicesToFinalContactTransition(options: ServicesToFinalContactOptions) {
   const exitStart = 0.85;
