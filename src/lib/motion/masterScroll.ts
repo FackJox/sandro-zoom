@@ -67,6 +67,9 @@ interface MasterScrollController {
   getSectionProgress: (name: SectionName) => number;
   getSectionByProgress: (progress: number) => SectionName | null;
   shouldSectionBeVisible: (name: SectionName) => boolean;
+
+  // Lens bug control (Framework 3 §3.5 - subtle blip on story transitions)
+  triggerLensBlip: () => void;
 }
 
 const sections = new Map<SectionName, SectionSegment>();
@@ -215,6 +218,40 @@ function registerLensBug(element: HTMLElement): () => void {
   return () => {
     lensBugElement = null;
   };
+}
+
+/**
+ * Trigger a subtle lens blip animation
+ * Framework 3 §3.5: Lens bug does subtle 5–10° rotation or 1–2% scale blip
+ * when crossing story boundaries within a section
+ */
+function triggerLensBlip(): void {
+  if (!lensBugElement) {
+    console.debug('[master-scroll] triggerLensBlip: no lens bug registered');
+    return;
+  }
+
+  // Check for reduced motion preference
+  if (typeof window !== 'undefined' && window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+    return;
+  }
+
+  console.debug('[master-scroll] triggerLensBlip');
+
+  // Subtle blip: 7° rotation + 1.02 scale, then back
+  gsap.timeline()
+    .to(lensBugElement, {
+      rotation: 7,
+      scale: 1.02,
+      duration: 0.12,
+      ease: brandEase
+    })
+    .to(lensBugElement, {
+      rotation: 0,
+      scale: 1,
+      duration: 0.18,
+      ease: brandEase
+    });
 }
 
 /**
@@ -540,7 +577,8 @@ export const masterScrollController: MasterScrollController = {
   buildZoomOutTransitions,
   getSectionProgress,
   getSectionByProgress,
-  shouldSectionBeVisible
+  shouldSectionBeVisible,
+  triggerLensBlip
 };
 
 // Convenience exports

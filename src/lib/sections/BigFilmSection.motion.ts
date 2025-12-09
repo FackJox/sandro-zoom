@@ -172,20 +172,21 @@ export function initBigFilmMotion(options: BigFilmMotionOptions) {
       stop - 0.02
     );
 
+    // Framework 2 spec: card transitions 220-260ms (iris effect)
     timeline
       .to(
         current,
         {
           clipPath: 'circle(0% at 50% 50%)',
           autoAlpha: 0.35,
-          duration: 0.3
+          duration: 0.24 // 240ms (middle of 220-260ms spec range)
         },
         stop
       )
       .fromTo(
         next,
         { clipPath: 'circle(0% at 50% 50%)', autoAlpha: 0 },
-        { clipPath: 'circle(150% at 50% 50%)', autoAlpha: 1, duration: 0.35 },
+        { clipPath: 'circle(150% at 50% 50%)', autoAlpha: 1, duration: 0.26 }, // 260ms
         stop + 0.05
       )
       .call(() => options.onStepChange?.(index + 1), undefined, stop + 0.02);

@@ -1,109 +1,117 @@
 <script lang="ts">
   /**
    * LensBarrelOverlay - Framework 2 §3.2
-   * Thin ring UI (like lens barrel) with tick marks and text labels
-   * Appears during card transitions to reinforce camera lens metaphor
+   *
+   * Lens barrel UI overlay with tick marks that appears during card transitions.
+   * Mimics camera lens barrel with small tick marks and label text.
    */
   import { css } from '$styled-system/css';
-  import { token } from '$styled-system/tokens';
+  import { gsap } from '$lib/motion';
+  import { onMount } from 'svelte';
 
   export let visible = false;
   export let label = '';
-  export let tickCount = 12;
 
-  // Generate tick positions around the circle
-  $: ticks = Array.from({ length: tickCount }, (_, i) => {
-    const angle = (i / tickCount) * 360;
-    return { angle, isLong: i % 3 === 0 };
-  });
+  let root: HTMLElement;
+  let wasVisible = false;
 
-  const overlayClass = css({
-    position: 'absolute',
-    inset: '-8px',
-    borderRadius: '999px',
-    pointerEvents: 'none',
-    opacity: 0,
-    transition: 'opacity 0.3s ease',
-    '&[data-visible="true"]': {
-      opacity: 1
+  $: if (root && visible !== wasVisible) {
+    if (visible) {
+      gsap.fromTo(
+        root,
+        { autoAlpha: 0, scale: 0.96 },
+        { autoAlpha: 1, scale: 1, duration: 0.22, ease: 'cubic-bezier(0.19, 1, 0.22, 1)' }
+      );
+    } else {
+      gsap.to(root, { autoAlpha: 0, duration: 0.18, ease: 'power2.in' });
     }
+    wasVisible = visible;
+  }
+
+  // Generate tick marks around the lens barrel (16 ticks)
+  const tickCount = 16;
+  const ticks = Array.from({ length: tickCount }, (_, i) => {
+    const angle = (i / tickCount) * 360;
+    const isCardinal = i % 4 === 0;
+    return { angle, isCardinal };
   });
 
-  const ringClass = css({
+  const overlay = css({
     position: 'absolute',
     inset: 0,
-    borderRadius: '999px',
-    borderWidth: '1px',
-    borderStyle: 'solid',
-    borderColor: 'accent'
+    pointerEvents: 'none',
+    opacity: 0,
+    visibility: 'hidden'
   });
 
-  const innerRingClass = css({
+  const ring = css({
     position: 'absolute',
     inset: '4px',
-    borderRadius: '999px',
-    borderWidth: '1px',
+    borderRadius: '4px',
+    borderWidth: '1.5px',
     borderStyle: 'solid',
-    borderColor: 'coverOfNight'
+    borderColor: 'eggToast',
+    opacity: 0.7
   });
 
-  const tickClass = css({
+  const tickBase = css({
     position: 'absolute',
-    top: '50%',
-    left: '50%',
     width: '1px',
-    transformOrigin: 'center center',
-    backgroundColor: 'accent'
+    backgroundColor: 'eggToast',
+    transformOrigin: '50% 100%',
+    opacity: 0.6
   });
 
-  const labelClass = css({
+  const tickMajor = css({
+    height: '8px',
+    opacity: 0.9
+  });
+
+  const tickMinor = css({
+    height: '5px'
+  });
+
+  const labelWrap = css({
     position: 'absolute',
-    fontFamily: 'plex',
+    bottom: '8px',
+    left: '50%',
+    transform: 'translateX(-50%)',
+    backgroundColor: 'bg/70',
+    paddingInline: '0.5rem',
+    paddingBlock: '0.15rem',
+    borderRadius: '2px'
+  });
+
+  const labelText = css({
+    fontFamily: 'trade',
     fontSize: '0.6rem',
-    textTransform: 'uppercase',
     letterSpacing: '0.2em',
-    color: 'accent',
+    textTransform: 'uppercase',
+    color: 'eggToast',
     whiteSpace: 'nowrap'
-  });
-
-  const topLabelClass = css({
-    top: '6px',
-    left: '50%',
-    transform: 'translateX(-50%)'
-  });
-
-  const bottomLabelClass = css({
-    bottom: '6px',
-    left: '50%',
-    transform: 'translateX(-50%)'
   });
 </script>
 
-<div class={overlayClass} data-visible={visible}>
-  <!-- Outer ring -->
-  <div class={ringClass}></div>
+<div class={overlay} bind:this={root}>
+  <!-- Lens barrel ring -->
+  <div class={ring}></div>
 
-  <!-- Inner ring -->
-  <div class={innerRingClass}></div>
-
-  <!-- Tick marks -->
+  <!-- Tick marks around the ring -->
   {#each ticks as tick}
     <div
-      class={tickClass}
+      class="{tickBase} {tick.isCardinal ? tickMajor : tickMinor}"
       style="
-        height: {tick.isLong ? '8px' : '4px'};
-        transform: rotate({tick.angle}deg) translateY(calc(-50% - {tick.isLong ? '4px' : '2px'})) translateX(-50%);
-        margin-top: calc(-50% + 2px);
+        top: 2px;
+        left: calc(50% - 0.5px);
+        transform: rotate({tick.angle}deg) translateY(-2px);
       "
     ></div>
   {/each}
 
-  <!-- Labels -->
+  <!-- Label at bottom -->
   {#if label}
-    {@const parts = label.split(' / ')}
-    <span class="{labelClass} {topLabelClass}">{parts[0] || ''}</span>
-    {#if parts[1]}
-      <span class="{labelClass} {bottomLabelClass}">{parts[1]}</span>
-    {/if}
+    <div class={labelWrap}>
+      <span class={labelText}>{label}</span>
+    </div>
   {/if}
 </div>

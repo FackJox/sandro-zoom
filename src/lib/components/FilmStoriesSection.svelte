@@ -14,7 +14,10 @@
     filmStoryMedia,
     filmStoryTitle,
     filmStoryBody,
-    filmStoryFocusRing
+    filmStoryFocusRing,
+    filmStoryTransitionStrip,
+    filmStoryTransitionFrame,
+    filmStoryTransitionFrameMedia
   } from '$lib/styles/recipes';
 
   type StoryCard = {
@@ -32,6 +35,7 @@
   let contentGrid: HTMLElement;
   let infoPanel: HTMLElement;
   let focusRing: HTMLDivElement | null = null;
+  let transitionStrip: HTMLDivElement | null = null;
   let activeIndex = 0;
   let timeline: gsap.core.Timeline | null = null;
   let timelineDisposer: (() => void) | null = null;
@@ -136,6 +140,11 @@
     activeIndex = 0;
     syncFocusRing(0, true);
 
+    // Framework 3 §3.5: Initialize transition strip (hidden, centered on first story)
+    if (transitionStrip) {
+      gsap.set(transitionStrip, { opacity: 0, xPercent: 0 });
+    }
+
     // Create paused timeline - controlled by master scroll controller
     const tl = gsap.timeline({
       defaults: { ease: brandEase },
@@ -167,12 +176,36 @@
       const transitionStart = (index + 0.85) * storyDuration;
       const transitionDuration = 0.15 * storyDuration;
 
-      // Circular iris transition:
-      // 1. Focus ring appears and tightens
-      // 2. Current video iris closes (circle shrinks)
-      // 3. Next video iris opens (circle expands)
-      // 4. Focus ring lifts away
+      // Framework 3 §3.5: Calculate strip offset for dolly pan effect
+      // Strip shows 3 frames and pans left as we progress through stories
+      const stripOffset = (index + 1) * -33.33; // -33.33% per story transition
+
+      // Circular iris transition with horizontal strip behind:
+      // 1. Strip appears and pans to show upcoming story
+      // 2. Focus ring appears and tightens
+      // 3. Current video iris closes (circle shrinks)
+      // 4. Next video iris opens (circle expands)
+      // 5. Strip fades, focus ring lifts away
       tl
+        // Framework 3 §3.5: Show transition strip behind (lens pan effect)
+        .to(
+          transitionStrip,
+          {
+            opacity: 0.85,
+            duration: transitionDuration * 0.2
+          },
+          transitionStart
+        )
+        // Pan the strip left to center on upcoming story
+        .to(
+          transitionStrip,
+          {
+            xPercent: stripOffset,
+            duration: transitionDuration * 0.6,
+            ease: 'power2.inOut'
+          },
+          transitionStart
+        )
         // Focus ring appears and scales up (preparing for incoming)
         .to(
           focusRing,
@@ -231,6 +264,15 @@
           },
           transitionStart + transitionDuration * 0.4
         )
+        // Hide transition strip as iris expands
+        .to(
+          transitionStrip,
+          {
+            opacity: 0,
+            duration: transitionDuration * 0.25
+          },
+          transitionStart + transitionDuration * 0.7
+        )
         // Focus ring lifts away (scales up and fades) as frame fills viewport
         .to(
           focusRing,
@@ -258,6 +300,8 @@
             activeIndex = i;
             syncFocusRing(i, true);
             animateTextTransition(i);
+            // Framework 3 §3.5: Subtle lens blip when crossing story boundaries
+            masterScrollController.triggerLensBlip();
           },
           [index + 1],
           transitionStart + transitionDuration * 0.5
@@ -380,6 +424,19 @@
     <!-- Video Viewport -->
     <div class={viewportWrapperClass}>
       <div class={filmStoryViewport()} bind:this={viewport}>
+        <!-- Framework 3 §3.5: Transition strip - shows 3 frames as horizontal strip during transitions -->
+        <div class={filmStoryTransitionStrip()} bind:this={transitionStrip} aria-hidden="true">
+          {#each stories as story, idx}
+            <div class={filmStoryTransitionFrame({ active: idx === activeIndex })}>
+              <video class={filmStoryTransitionFrameMedia()} autoplay muted loop playsinline>
+                {#each getVideoSources(story.src) as source}
+                  <source src={source.src} type={source.type} />
+                {/each}
+              </video>
+            </div>
+          {/each}
+        </div>
+
         {#each stories as story, index}
           <article class={filmStoryCard()} bind:this={story.ref}>
             <div bind:this={story.mediaRef} style="width: 100%; height: 100%;">

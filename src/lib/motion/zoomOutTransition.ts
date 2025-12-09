@@ -33,7 +33,9 @@ const CLIP_GONE = 'circle(0% at 50% 50%)';
 // Parallax settings
 const PARALLAX_START_SCALE = 1.2;
 const PARALLAX_START_Y = -40;
-const PARALLAX_RATE = 0.85; // Lags behind mask for depth effect
+// Parallax rate multiplier: elements lag behind mask contraction
+// Duration is divided by this (not multiplied) so parallax takes longer = lags behind
+const PARALLAX_RATE = 0.85;
 
 /**
  * Generate a torus (donut) mask using radial-gradient
@@ -203,13 +205,14 @@ export function buildZoomOutSegment(
     );
 
     // Animate to final position (slightly slower than mask = depth)
+    // Divide by PARALLAX_RATE to make duration longer (lags behind mask)
     tl.to(
       incomingSection.parallaxTargets,
       {
         scale: 1,
         y: 0,
         opacity: 1,
-        duration: duration * PARALLAX_RATE,
+        duration: duration / PARALLAX_RATE,
         stagger: 0.06,
         ease: brandEase
       },

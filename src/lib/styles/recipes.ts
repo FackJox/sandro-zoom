@@ -613,6 +613,55 @@ export const filmStoriesEntryDivider = cva({
   }
 });
 
+// Film Stories in-section transition strip (Framework 3 §3.5)
+// Horizontal strip showing 3 story frames behind the main video during transitions
+export const filmStoryTransitionStrip = cva({
+  base: {
+    position: 'absolute',
+    inset: 0,
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: '0.75rem',
+    opacity: 0,
+    pointerEvents: 'none',
+    zIndex: -1,
+    backgroundColor: token('colors.blackStallion')
+  }
+});
+
+export const filmStoryTransitionFrame = cva({
+  base: {
+    width: '30%',
+    aspectRatio: '16 / 9',
+    borderWidth: '1px',
+    borderStyle: 'solid',
+    borderColor: token('colors.coverOfNight'),
+    borderRadius: '2px',
+    overflow: 'hidden',
+    opacity: 0.5,
+    filter: 'grayscale(0.4) blur(1px)',
+    flexShrink: 0
+  },
+  variants: {
+    active: {
+      true: {
+        opacity: 1,
+        filter: 'grayscale(0) blur(0)',
+        borderColor: token('colors.eggToast')
+      }
+    }
+  }
+});
+
+export const filmStoryTransitionFrameMedia = cva({
+  base: {
+    width: '100%',
+    height: '100%',
+    objectFit: 'cover'
+  }
+});
+
 // ─────────────────────────────────────────────────────────────────
 // Shared Portal & Focus Ring Styles (used across sections)
 // ─────────────────────────────────────────────────────────────────
