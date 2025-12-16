@@ -1,6 +1,7 @@
 import { gsap } from '$lib/motion';
 import { brandEase } from '$lib/motion';
 import { SECTION_SEGMENTS, type SectionName } from './sectionConfig';
+import { Z_INDEX_LAYERS } from './visibilityConfig';
 
 /**
  * Zoom-Out Reveal Transition System
@@ -77,16 +78,6 @@ export interface ZoomOutTransitionConfig {
 }
 
 export type SectionRole = 'remnant' | 'current' | 'incoming' | 'inactive';
-
-/**
- * Z-index values for section roles
- */
-export const ROLE_Z_INDEX: Record<SectionRole, number> = {
-  remnant: 3,
-  current: 2,
-  incoming: 1,
-  inactive: 0
-};
 
 /**
  * Zoom-out transition boundaries
@@ -338,7 +329,7 @@ export function applySectionZIndex(
 ): void {
   for (const [name, element] of sections) {
     const role = roles.get(name) || 'inactive';
-    element.style.zIndex = String(ROLE_Z_INDEX[role]);
+    element.style.zIndex = String(Z_INDEX_LAYERS[role]);
   }
 }
 

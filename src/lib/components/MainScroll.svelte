@@ -64,11 +64,13 @@
   });
 
   // Lens bug positioning within persistent layer
+  // Explicit z-index ensures lens badge stays above all sections
   const lensBugSlot = css({
     position: 'absolute',
     top: '1.5rem',
     right: '1.5rem',
-    pointerEvents: 'auto'
+    pointerEvents: 'auto',
+    zIndex: 10
   });
 
   let rootEl: HTMLElement | null = null;

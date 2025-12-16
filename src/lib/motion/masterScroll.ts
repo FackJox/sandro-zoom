@@ -11,6 +11,7 @@ import {
   type ZoomOutSectionRefs
 } from './zoomOutTransition';
 import { SECTION_SEGMENTS, TOTAL_SCROLL_VH, type SectionName } from './sectionConfig';
+import { SECTION_VISIBILITY, Z_INDEX_LAYERS } from './visibilityConfig';
 
 // Re-export from sectionConfig for backwards compatibility
 export { SECTION_SEGMENTS, TOTAL_SCROLL_VH, type SectionName } from './sectionConfig';
@@ -183,11 +184,20 @@ function registerSection(
   // Register ALL sections for visibility control (not just zoom-out)
   sectionElements.set(name, element);
 
+  // Set initial visibility state based on config
+  // This prevents "flash of all content" on page load
+  const visConfig = SECTION_VISIBILITY[name];
+  gsap.set(element, {
+    autoAlpha: visConfig.initialVisible ? 1 : 0,
+    zIndex: visConfig.initialVisible ? Z_INDEX_LAYERS.current : Z_INDEX_LAYERS.inactive
+  });
+
   console.debug('[master-scroll] registerSection', name, {
     start: segment.start,
     duration: segment.duration,
     hasTimeline: Boolean(segment.timeline),
-    isZoomOut: isZoomOutSection(name)
+    isZoomOut: isZoomOutSection(name),
+    initialVisible: visConfig.initialVisible
   });
 
   return () => {
@@ -391,21 +401,21 @@ let lastVisibilityLogChunk = -1;
 
 /**
  * Apply section visibility based on scroll position.
- * This is the SINGLE SOURCE OF TRUTH for section visibility.
  *
- * Visibility rules:
- * - Hero: Always visible until it fully contracts (end of Hero segment)
- * - Logos: Visible when Hero starts transitioning (last 25% of Hero) through end of Logos
- * - BigFilm: Visible during Logos exit (last 15%) and throughout its section
- * - Zoom-out sections: Visible based on role (current/incoming/remnant)
- * - Other sections: Visible when scroll reaches them
+ * SINGLE SOURCE OF TRUTH: Uses explicit scroll ranges from SECTION_VISIBILITY.
+ * This replaces the previous mixed role-based and position-based logic that
+ * caused race conditions and premature section reveals.
  *
- * Z-index layering (higher = on top):
+ * Visibility: Determined purely by scroll position within each section's range.
+ * Z-index: Determined by role (for stacking during zoom-out transitions).
+ *
+ * Z-index layering (from Z_INDEX_LAYERS):
+ * - 10: Lens badge (always on top)
  * - 5: Hero (when active)
  * - 4: Logos (during its segment)
- * - 3: Remnant section
+ * - 3: Remnant section (zoom-out)
  * - 2: Current section
- * - 1: Incoming section / other sections
+ * - 1: Incoming section
  * - 0: Inactive sections
  */
 function applySectionVisibility(
@@ -424,44 +434,30 @@ function applySectionVisibility(
   }
 
   for (const [name, element] of sectionElements) {
-    let shouldBeVisible = false;
-    let zIndex = 0;
+    const visConfig = SECTION_VISIBILITY[name];
 
-    if (name === 'hero') {
-      // Hero visible from start until Logos section ends (contracts during exit)
-      const logosEnd = SECTION_SEGMENTS.logos.start + SECTION_SEGMENTS.logos.duration;
-      shouldBeVisible = scrollVH < logosEnd;
-      // Hero z-index: on top until Logos starts, then behind
-      zIndex = scrollVH < SECTION_SEGMENTS.logos.start ? 5 : 0;
-    } else if (name === 'logos') {
-      // Logos: visible when Hero starts transitioning out (last 25% of Hero)
-      // This ensures Logos appears BEFORE metadata detaches
-      const heroTransitionStart = SECTION_SEGMENTS.hero.start + SECTION_SEGMENTS.hero.duration * 0.75;
-      const logosEnd = SECTION_SEGMENTS.logos.start + SECTION_SEGMENTS.logos.duration;
-      shouldBeVisible = scrollVH >= heroTransitionStart && scrollVH < logosEnd + 50;
-      zIndex = 4; // Above BigFilm during portal transition
-    } else if (name === 'bigFilm') {
-      // BigFilm: visible during Logos exit (last 15%) and throughout its section
-      // This handles the Logos → BigFilm portal zoom transition
-      const logosExitStart = SECTION_SEGMENTS.logos.start + SECTION_SEGMENTS.logos.duration * 0.85;
-      const role = roles.get(name) || 'inactive';
-      shouldBeVisible = scrollVH >= logosExitStart || role !== 'inactive';
-      const logosEnd = SECTION_SEGMENTS.logos.start + SECTION_SEGMENTS.logos.duration;
-      zIndex = scrollVH < logosEnd ? 1 : 2; // Behind Logos during portal, then in front
-    } else if (isZoomOutSection(name)) {
-      // Zoom-out sections: visible based on role
-      const role = roles.get(name) || 'inactive';
-      shouldBeVisible = role !== 'inactive';
-      // Z-index based on role: remnant=3, current=2, incoming=1
-      zIndex = role === 'remnant' ? 3 : role === 'current' ? 2 : role === 'incoming' ? 1 : 0;
+    // SINGLE SOURCE OF TRUTH: Pure scroll-range visibility
+    const shouldBeVisible = scrollVH >= visConfig.start && scrollVH < visConfig.end;
+
+    // Z-index based on role for proper stacking during transitions
+    let zIndex: number;
+    const role = roles.get(name) || 'inactive';
+
+    if (name === 'hero' && scrollVH < SECTION_SEGMENTS.logos.start) {
+      zIndex = Z_INDEX_LAYERS.hero;
+    } else if (name === 'logos' && scrollVH < SECTION_SEGMENTS.bigFilm.start) {
+      zIndex = Z_INDEX_LAYERS.logos;
+    } else if (role === 'remnant') {
+      zIndex = Z_INDEX_LAYERS.remnant;
+    } else if (role === 'current') {
+      zIndex = Z_INDEX_LAYERS.current;
+    } else if (role === 'incoming') {
+      zIndex = Z_INDEX_LAYERS.incoming;
     } else {
-      // Non-zoom-out sections: visible when scroll reaches them
-      // Use a small buffer (10vh) before section start for smooth transitions
-      const config = SECTION_SEGMENTS[name];
-      shouldBeVisible = scrollVH >= config.start - 10;
-      zIndex = 1;
+      zIndex = Z_INDEX_LAYERS.inactive;
     }
 
+    // Use GSAP autoAlpha for proper visibility management
     gsap.set(element, { autoAlpha: shouldBeVisible ? 1 : 0, zIndex });
   }
 }
@@ -500,12 +496,12 @@ function updateSections(globalProgress: number) {
     notifySection(name, localProgress, isActive);
   }
 
-  // Update section roles and z-index for zoom-out transitions
+  // Update section roles for zoom-out transitions
   const roles = getSectionRoles(scrollVH);
   sectionRolesStore.set(roles);
-  applySectionZIndex(sectionElements, roles);
 
-  // SINGLE SOURCE OF TRUTH: Apply visibility based on scroll position
+  // SINGLE SOURCE OF TRUTH: Apply visibility AND z-index based on scroll position
+  // (z-index is now handled inside applySectionVisibility using roles for stacking)
   applySectionVisibility(scrollVH, roles);
 
   stateStore.set({
