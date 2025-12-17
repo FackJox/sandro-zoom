@@ -1,5 +1,5 @@
 import { gsap, brandEase, type ScrollOrchestrator, masterScrollController } from '$lib/motion';
-import { registerLensSegment, setLensSegmentProgress } from '$lib/motion/lensTimeline';
+import { registerLensSegment, setLensSegmentProgress, attachLensToSection } from '$lib/motion/lensTimeline';
 
 interface LogosTimelineOptions {
   root: HTMLElement;
@@ -97,10 +97,26 @@ export function initLogosTimelines(options: LogosTimelineOptions) {
 
   registerAnimation('logos:master', masterTimeline);
 
+  // Track active state for lens attachment
+  let wasActive = false;
+
   // Register with master scroll controller for progress updates
   const unsubscribeMaster = masterScrollController.onSectionProgress('logos', (progress, isActive) => {
     masterTimeline.progress(progress);
     setLensSegmentProgress(logosSegment, progress);
+
+    // Handle lens attachment based on active state
+    if (isActive && !wasActive) {
+      console.debug('[logos-motion] enter');
+      attachLensToSection('logos');
+    } else if (!isActive && wasActive && progress >= 0.95) {
+      console.debug('[logos-motion] leave → bigFilm');
+      attachLensToSection('film');
+    } else if (!isActive && wasActive && progress <= 0.05) {
+      console.debug('[logos-motion] leaveBack → hero');
+      attachLensToSection('hero');
+    }
+    wasActive = isActive;
 
     // Only log periodically to avoid spam
     if (Math.floor(progress * 20) !== Math.floor((progress - 0.05) * 20)) {

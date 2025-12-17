@@ -77,7 +77,7 @@ export function initBigFilmMotion(options: BigFilmMotionOptions) {
       start: 'top center',
       end: 'bottom center',
       onEnter: () => attachLensToSection('film'),
-      onLeave: () => attachLensToSection(null),
+      onLeave: () => attachLensToSection('filmStories'),
       onEnterBack: () => attachLensToSection('film'),
       onLeaveBack: () => attachLensToSection('logos')
     });
@@ -133,8 +133,8 @@ export function initBigFilmMotion(options: BigFilmMotionOptions) {
       console.debug('[big-film-motion] enter');
       attachLensToSection('film');
     } else if (!isActive && wasActive && progress >= 0.95) {
-      console.debug('[big-film-motion] leave');
-      attachLensToSection(null);
+      console.debug('[big-film-motion] leave → filmStories');
+      attachLensToSection('filmStories');
     } else if (!isActive && wasActive && progress <= 0.05) {
       console.debug('[big-film-motion] leaveBack');
       attachLensToSection('logos');

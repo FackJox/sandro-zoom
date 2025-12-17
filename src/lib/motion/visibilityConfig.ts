@@ -70,7 +70,7 @@ export const SECTION_VISIBILITY: Record<SectionName, VisibilityRange> = {
     initialVisible: false
   },
   services: {
-    start: 1415, // About at 85% (1160 + 300*0.85 = 1415)
+    start: 1460, // Match About section end exactly - no premature visibility
     end: 1775,   // 15vh buffer (1760 + 15)
     initialVisible: false
   },

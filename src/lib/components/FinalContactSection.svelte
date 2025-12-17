@@ -4,6 +4,7 @@
   import { heading, body } from '$styled-system/recipes';
   import { layout } from '$design/system';
   import { gsap, brandEase, SCROLL_ORCHESTRATOR_CONTEXT_KEY, type ScrollOrchestrator, masterScrollController } from '$lib/motion';
+  import { attachLensToSection } from '$lib/motion/lensTimeline';
   import { CameraRevealScene } from '$lib/components/camera';
   import { contactInfo } from '$lib/data/contact';
 
@@ -29,6 +30,7 @@
     getContext<ScrollOrchestrator | undefined>(SCROLL_ORCHESTRATOR_CONTEXT_KEY);
   let timeline: gsap.core.Timeline | null = null;
   let timelineDisposer: (() => void) | null = null;
+  let wasActive = false;
 
   export function receivePortalIntro(detail?: { focusRect?: DOMRect }) {
     if (!portalMask) return;
@@ -127,10 +129,20 @@
     const unsubscribeMaster = masterScrollController.onSectionProgress('finalContact', (progress, isActive) => {
       tl.progress(progress);
 
-      // Start idle animation when section becomes active
-      if (isActive && !idleTimeline) {
-        setupIdleAnimation();
+      // Handle lens attachment based on active state
+      if (isActive && !wasActive) {
+        console.debug('[finalContact] enter');
+        attachLensToSection('finalContact');
+        // Start idle animation when section becomes active
+        if (!idleTimeline) {
+          setupIdleAnimation();
+        }
+      } else if (!isActive && wasActive && progress <= 0.05) {
+        console.debug('[finalContact] leaveBack → services');
+        attachLensToSection('services');
       }
+      // No leave case - this is the final section
+      wasActive = isActive;
     });
 
     // Register section element with master controller

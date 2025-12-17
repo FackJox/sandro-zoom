@@ -112,8 +112,9 @@ function prefersReducedMotion(): boolean {
 
 /**
  * Build a single zoom-out transition timeline segment
- * Uses torus (donut) mask: ring thickens as inner hole closes
- * Respects prefers-reduced-motion by skipping parallax animations
+ * Uses clipPath circle for consistency with section visibility.
+ * Exiting section contracts to a small remnant circle while incoming section parallaxes in.
+ * Respects prefers-reduced-motion by skipping parallax animations.
  */
 export function buildZoomOutSegment(
   config: ZoomOutTransitionConfig,
@@ -130,55 +131,30 @@ export function buildZoomOutSegment(
   }
 
   // 1. Remnant from previous transition shrinks to nothing
+  // Uses clipPath for consistency with section visibility
   if (remnantSection?.root) {
-    const remnantProxy = { inner: TORUS_REMNANT.inner, outer: TORUS_REMNANT.outer };
     tl.to(
-      remnantProxy,
+      remnantSection.root,
       {
-        inner: TORUS_GONE.inner,
-        outer: TORUS_GONE.outer,
+        clipPath: CLIP_GONE,
         duration: duration * 0.4,
-        ease: 'power2.in',
-        onUpdate: () => {
-          applyMaskImage(remnantSection.root, getTorusMask(remnantProxy.inner, remnantProxy.outer));
-        }
+        ease: 'power2.in'
       },
       0
     );
   }
 
-  // 2. Current section: torus mask animation
-  // Inner hole closes faster than outer shrinks → ring thickens
-  const torusProxy = { inner: TORUS_START.inner, outer: TORUS_START.outer };
-
-  // Set initial torus mask (thin ring at edge)
-  tl.set(exitingSection.root, {
-    onComplete: () => {
-      applyMaskImage(exitingSection.root, getTorusMask(TORUS_START.inner, TORUS_START.outer));
-    }
-  }, 0);
-
-  // Animate torus: inner closes fast (140→0), outer closes slow (150→100)
+  // 2. Current section: contract from full to remnant circle
+  // clipPath provides smoother, more consistent transitions than mask-image
   tl.to(
-    torusProxy,
+    exitingSection.root,
     {
-      inner: TORUS_END.inner,
-      outer: TORUS_END.outer,
+      clipPath: CLIP_REMNANT,
       duration: duration,
-      ease: 'power2.inOut',
-      onUpdate: () => {
-        applyMaskImage(exitingSection.root, getTorusMask(torusProxy.inner, torusProxy.outer));
-      }
+      ease: 'power2.inOut'
     },
     0
   );
-
-  // At end, set to remnant state (small visible circle)
-  tl.set(exitingSection.root, {
-    onComplete: () => {
-      applyMaskImage(exitingSection.root, getTorusMask(TORUS_REMNANT.inner, TORUS_REMNANT.outer));
-    }
-  }, duration);
 
   // 3. Incoming section parallax elements shrink into position
   // They start oversized (behind camera) and settle to normal
@@ -335,16 +311,15 @@ export function applySectionZIndex(
 
 /**
  * Initialize section for zoom-out system
- * Sets initial mask-image and visibility
+ * Sets initial clipPath and visibility
  */
 export function initSectionForZoomOut(
   section: HTMLElement,
   isInitiallyVisible: boolean
 ): void {
-  // Use filled circle mask (no hole) for initial full visibility
-  const fullMask = getTorusMask(0, 150);
-  applyMaskImage(section, fullMask);
+  // Use full clipPath circle for initial visibility
   gsap.set(section, {
+    clipPath: CLIP_FULL,
     autoAlpha: isInitiallyVisible ? 1 : 0
   });
 }

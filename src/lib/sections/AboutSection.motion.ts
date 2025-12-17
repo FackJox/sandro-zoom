@@ -8,6 +8,7 @@
  */
 
 import { gsap, brandEase, type ScrollOrchestrator, masterScrollController } from '$lib/motion';
+import { attachLensToSection } from '$lib/motion/lensTimeline';
 import type { Beat } from '$lib/data/about-beats';
 
 // ─────────────────────────────────────────────────────────────────
@@ -266,6 +267,7 @@ export function initAboutTimeline(options: AboutMotionOptions): () => void {
   } = options;
 
   let activeIndex = 0;
+  let wasActive = false;
 
   // Create paused timeline - controlled by master scroll controller
   const tl = gsap.timeline({
@@ -276,6 +278,19 @@ export function initAboutTimeline(options: AboutMotionOptions): () => void {
   // Register with master scroll controller for progress updates
   const unsubscribeMaster = masterScrollController.onSectionProgress('about', (progress, isActive) => {
     tl.progress(progress);
+
+    // Handle lens attachment based on active state
+    if (isActive && !wasActive) {
+      console.debug('[about] enter');
+      attachLensToSection('about');
+    } else if (!isActive && wasActive && progress >= 0.95) {
+      console.debug('[about] leave → services');
+      attachLensToSection('services');
+    } else if (!isActive && wasActive && progress <= 0.05) {
+      console.debug('[about] leaveBack → photoStats');
+      attachLensToSection('photoStats');
+    }
+    wasActive = isActive;
 
     // Update active index based on progress
     const newIndex = Math.min(Math.floor(progress * 3), 2);

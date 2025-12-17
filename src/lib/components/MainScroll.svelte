@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onMount, setContext, tick } from 'svelte';
+  import { onMount, onDestroy, setContext, tick } from 'svelte';
   import { cx, css } from '$styled-system/css';
   import {
     initScrollShell,
@@ -10,7 +10,29 @@
     SECTION_SEGMENTS,
     MASTER_SCROLL_CONTEXT_KEY
   } from '$lib/motion';
+  import { lensAttachment } from '$lib/motion/lensTimeline';
   import LensBadge from './LensBadge.svelte';
+
+  // Track lens attachment for persistent layer visibility
+  // Hero section has its own LensBadge, so hide persistent one when hero owns it
+  let currentAttachment: string | null = null;
+  let currentSection: string | null = null;
+  let showPersistentLens = false;
+
+  // Derive lens owner: prefer explicit attachment, fallback to current section
+  // This prevents lens from disappearing when sections don't call attachLensToSection reliably
+  $: {
+    const derivedOwner = currentAttachment ?? (currentSection !== 'hero' ? currentSection : null);
+    showPersistentLens = derivedOwner !== null && derivedOwner !== 'hero';
+  }
+
+  const unsubLensAttachment = lensAttachment.subscribe((value) => {
+    currentAttachment = value;
+  });
+
+  const unsubCurrentSection = masterScrollController.currentSection.subscribe((value) => {
+    currentSection = value;
+  });
 
   export let className: string | undefined = undefined;
 
@@ -121,6 +143,11 @@
       destroyShell();
     };
   });
+
+  onDestroy(() => {
+    unsubLensAttachment();
+    unsubCurrentSection();
+  });
 </script>
 
 <!-- Global scrollbar hiding -->
@@ -153,7 +180,12 @@
 
   <!-- Persistent layer - outside section stack, never masked by zoom-out transitions -->
   <div class={persistentLayer}>
-    <div class={lensBugSlot} bind:this={lensBugRef}>
+    <div
+      class={lensBugSlot}
+      bind:this={lensBugRef}
+      style:opacity={showPersistentLens ? 1 : 0}
+      style:visibility={showPersistentLens ? 'visible' : 'hidden'}
+    >
       <LensBadge
         size={48}
         tone="ghost"

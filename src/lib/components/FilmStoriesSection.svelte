@@ -3,6 +3,7 @@
   import { css } from '$styled-system/css';
   import { layout } from '$design/system';
   import { gsap, brandEase, SCROLL_ORCHESTRATOR_CONTEXT_KEY, type ScrollOrchestrator, masterScrollController } from '$lib/motion';
+  import { attachLensToSection } from '$lib/motion/lensTimeline';
   import SectionLabel from './SectionLabel.svelte';
   import StepIndicator from './StepIndicator.svelte';
   import { getVideoSources } from '$lib/utils/video';
@@ -41,6 +42,7 @@
   let timelineDisposer: (() => void) | null = null;
   let sectionCleanup: (() => void) | null = null;
   let exitPortalCleanup: (() => void) | null = null;
+  let wasActive = false;
 
   // Text element refs for GSAP animation
   let mobileTitleRef: HTMLElement | null = null;
@@ -152,8 +154,21 @@
     });
 
     // Register with master scroll controller for progress updates
-    const unsubscribeMaster = masterScrollController.onSectionProgress('filmStories', (progress) => {
+    const unsubscribeMaster = masterScrollController.onSectionProgress('filmStories', (progress, isActive) => {
       tl.progress(progress);
+
+      // Handle lens attachment based on active state
+      if (isActive && !wasActive) {
+        console.debug('[film-stories] enter');
+        attachLensToSection('filmStories');
+      } else if (!isActive && wasActive && progress >= 0.95) {
+        console.debug('[film-stories] leave → photoStats');
+        attachLensToSection('photoStats');
+      } else if (!isActive && wasActive && progress <= 0.05) {
+        console.debug('[film-stories] leaveBack → film');
+        attachLensToSection('film');
+      }
+      wasActive = isActive;
     });
 
     // Register section element with master controller

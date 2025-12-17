@@ -4,6 +4,7 @@
   import { heading, body } from '$styled-system/recipes';
   import { layout } from '$design/system';
   import { gsap, brandEase, SCROLL_ORCHESTRATOR_CONTEXT_KEY, type ScrollOrchestrator, masterScrollController } from '$lib/motion';
+  import { attachLensToSection } from '$lib/motion/lensTimeline';
   import SectionLabel from './SectionLabel.svelte';
   import { getVideoSources } from '$lib/utils/video';
   import StepIndicator from './StepIndicator.svelte';
@@ -15,6 +16,7 @@
   let focusRing: HTMLDivElement | null = null;
   let activeIndex = 0;
   let sectionCleanup: (() => void) | null = null;
+  let wasActive = false;
 
   const sectionClass = css({
     position: 'absolute',
@@ -142,6 +144,19 @@ function moveRing(target: HTMLElement | null, immediate = false) {
       // Register with master scroll controller for progress updates
       const unsubscribeMaster = masterScrollController.onSectionProgress('photoStats', (progress, isActive) => {
         tl.progress(progress);
+
+        // Handle lens attachment based on active state
+        if (isActive && !wasActive) {
+          console.debug('[photo-stats] enter');
+          attachLensToSection('photoStats');
+        } else if (!isActive && wasActive && progress >= 0.95) {
+          console.debug('[photo-stats] leave → about');
+          attachLensToSection('about');
+        } else if (!isActive && wasActive && progress <= 0.05) {
+          console.debug('[photo-stats] leaveBack → filmStories');
+          attachLensToSection('filmStories');
+        }
+        wasActive = isActive;
       });
 
       // Register section element with master controller

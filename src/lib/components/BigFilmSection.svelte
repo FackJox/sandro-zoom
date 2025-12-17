@@ -196,7 +196,7 @@
     initializingMotion = false;
   }
 
-  onMount(() => {
+  onMount(async () => {
     mounted = true;
 
     // CRITICAL: Register section element IMMEDIATELY for visibility control
@@ -204,6 +204,29 @@
     // GSAP best practice: element registration on mount, timeline registration when ready
     sectionCleanup = masterScrollController.registerSection('bigFilm', root);
     console.debug('[big-film] registered section element for visibility control');
+
+    // Collect media nodes immediately for visibility fallback
+    await tick();
+    collectMediaNodes();
+
+    // Initialize first card to visible state immediately (don't wait for portal)
+    // This prevents empty DOM when user lands on or scrolls to BigFilm section
+    if (mediaNodes.length > 0) {
+      gsap.set(mediaNodes[0], { autoAlpha: 1, clipPath: 'circle(150% at 50% 50%)' });
+      // Hide subsequent cards
+      mediaNodes.slice(1).forEach((node) => {
+        gsap.set(node, { autoAlpha: 0, clipPath: 'circle(0% at 50% 50%)' });
+      });
+      console.debug('[big-film] initialized card visibility fallback');
+    }
+
+    // Fallback: if already scrolled into BigFilm range, bootstrap immediately
+    // BigFilm visibility starts at 410vh (per visibilityConfig.ts)
+    const scrollVH = window.scrollY / (window.innerHeight / 100);
+    if (scrollVH >= 410 && !filmPortalReady) {
+      console.debug('[big-film] scroll fallback - already in BigFilm range at', scrollVH.toFixed(0), 'vh');
+      filmPortalReady = true;
+    }
 
     if (filmPortalReady) {
       bootstrapMotion();

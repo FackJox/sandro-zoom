@@ -4,6 +4,7 @@
   import { heading, body } from '$styled-system/recipes';
   import { layout } from '$design/system';
   import { gsap, brandEase, SCROLL_ORCHESTRATOR_CONTEXT_KEY, type ScrollOrchestrator, masterScrollController } from '$lib/motion';
+  import { attachLensToSection } from '$lib/motion/lensTimeline';
   import { getVideoSources } from '$lib/utils/video';
   import { serviceCredits, servicesHeading, servicesCta } from '$lib/data/services';
 
@@ -60,6 +61,7 @@
   let timeline: gsap.core.Timeline | null = null;
   let timelineDisposer: (() => void) | null = null;
   let portalTimeline: gsap.core.Timeline | null = null;
+  let wasActive = false;
 
   // Entry portal from AboutSection
   export function receivePortalIntro(detail?: { focusRect?: DOMRect }) {
@@ -121,6 +123,19 @@
     // Register with master scroll controller for progress updates
     const unsubscribeMaster = masterScrollController.onSectionProgress('services', (progress, isActive) => {
       tl.progress(progress);
+
+      // Handle lens attachment based on active state
+      if (isActive && !wasActive) {
+        console.debug('[services] enter');
+        attachLensToSection('services');
+      } else if (!isActive && wasActive && progress >= 0.95) {
+        console.debug('[services] leave → finalContact');
+        attachLensToSection('finalContact');
+      } else if (!isActive && wasActive && progress <= 0.05) {
+        console.debug('[services] leaveBack → about');
+        attachLensToSection('about');
+      }
+      wasActive = isActive;
     });
 
     // Register section element with master controller
