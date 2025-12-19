@@ -154,11 +154,11 @@
       unregisterSection();
     };
 
-    // Simple fade-in animation for contact block
+    // Contact text fade in 0→1 with rise (+10px→0) per Framework 5 §4.3
     tl.fromTo(
       contactBlock,
-      { opacity: 0, y: 40 },
-      { opacity: 1, y: 0, duration: 0.6 },
+      { opacity: 0, y: 10 },
+      { opacity: 1, y: 0, duration: 0.6, ease: brandEase },
       0.2
     );
 

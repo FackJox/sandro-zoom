@@ -43,6 +43,7 @@
   let sectionCleanup: (() => void) | null = null;
   let exitPortalCleanup: (() => void) | null = null;
   let wasActive = false;
+  let lastProgress = 0; // Track for direction detection
 
   // Text element refs for GSAP animation
   let mobileTitleRef: HTMLElement | null = null;
@@ -127,8 +128,23 @@
 
     await tick();
     if (!root || !viewport || stories.some((story) => !story.ref || !story.mediaRef)) {
+      console.warn('[film-stories] Missing required elements for timeline');
       return;
     }
+    // §3.5 Fix: Ensure transition strip and focus ring are bound - REQUIRED for animations
+    if (!transitionStrip) {
+      console.error('[film-stories] CRITICAL: transitionStrip not bound - transition animations will fail');
+      return;
+    }
+    if (!focusRing) {
+      console.error('[film-stories] CRITICAL: focusRing not bound - focus ring animations will fail');
+      return;
+    }
+    console.debug('[film-stories] timeline init - all elements bound', {
+      transitionStrip: !!transitionStrip,
+      focusRing: !!focusRing,
+      storyCards: stories.length
+    });
 
     // Initialize: first story visible with full circle, others hidden
     stories.forEach((story, index) => {
@@ -144,35 +160,72 @@
 
     // Framework 3 §3.5: Initialize transition strip (hidden, centered on first story)
     if (transitionStrip) {
-      gsap.set(transitionStrip, { opacity: 0, xPercent: 0 });
+      gsap.set(transitionStrip, { opacity: 0, xPercent: 0, visibility: 'visible' });
+    }
+    // Framework 3 §3.5: Initialize focus ring (hidden, centered, ready for animation)
+    if (focusRing) {
+      gsap.set(focusRing, { opacity: 0, scale: 1, visibility: 'visible' });
     }
 
     // Create paused timeline - controlled by master scroll controller
+    // Timeline positions will be normalized after all tweens are added
     const tl = gsap.timeline({
       defaults: { ease: brandEase },
       paused: true
     });
 
     // Register with master scroll controller for progress updates
+    // Use tl.progress(progress) to map 0-1 scroll progress to timeline percentage
+    // This works regardless of timeline duration (handles exit portal tweens at > 1.0 positions)
     const unsubscribeMaster = masterScrollController.onSectionProgress('filmStories', (progress, isActive) => {
+      // Progress mapping - scroll 0-100% maps to timeline 0-100%
       tl.progress(progress);
+
+      // §3.5 Fix: Calculate activeIndex from progress for bidirectional scrubbing
+      const isReverseScrolling = progress < lastProgress;
+      lastProgress = progress;
+
+      // Each story occupies 1/3 of the timeline
+      const storyDuration = 1 / stories.length; // ~0.333
+
+      // Calculate which story should be active based on progress
+      let newIndex = 0;
+      for (let i = 0; i < stories.length - 1; i++) {
+        const switchPoint = (i + 1) * storyDuration;
+        if (progress >= switchPoint) {
+          newIndex = i + 1;
+        }
+      }
+      newIndex = Math.min(newIndex, stories.length - 1);
+
+      // Update text content when story changes (bidirectionally)
+      if (newIndex !== activeIndex) {
+        const newStory = stories[newIndex];
+        if (newStory) {
+          displayTitle = newStory.title;
+          displayBody = newStory.body;
+        }
+        activeIndex = newIndex;
+        syncFocusRing(newIndex, true);
+      }
 
       // Handle lens attachment based on active state
       if (isActive && !wasActive) {
-        console.debug('[film-stories] enter');
         attachLensToSection('filmStories');
+        gsap.set(root, { clipPath: 'circle(150% at 50% 50%)' });
       } else if (!isActive && wasActive && progress >= 0.95) {
-        console.debug('[film-stories] leave → photoStats');
         attachLensToSection('photoStats');
       } else if (!isActive && wasActive && progress <= 0.05) {
-        console.debug('[film-stories] leaveBack → film');
         attachLensToSection('film');
+        gsap.set(root, { clipPath: 'circle(150% at 50% 50%)' });
       }
       wasActive = isActive;
     });
 
     // Register section element with master controller
-    const unregisterSection = masterScrollController.registerSection('filmStories', root, tl);
+    // NOTE: Do NOT pass timeline here - we control it ourselves via onSectionProgress callback
+    // The timeline is normalized to duration 1.0, so progress maps directly
+    const unregisterSection = masterScrollController.registerSection('filmStories', root);
 
     // Store cleanup functions
     const masterCleanup = () => {
@@ -196,18 +249,21 @@
       const stripOffset = (index + 1) * -33.33; // -33.33% per story transition
 
       // Circular iris transition with horizontal strip behind:
-      // 1. Strip appears and pans to show upcoming story
+      // 1. Strip fades in and pans to show upcoming story
       // 2. Focus ring appears and tightens
       // 3. Current video iris closes (circle shrinks)
       // 4. Next video iris opens (circle expands)
-      // 5. Strip fades, focus ring lifts away
+      // 5. Strip fades out, focus ring lifts away
       tl
-        // Framework 3 §3.5: Show transition strip behind (lens pan effect)
+        // Framework 3 §3.5: Reset strip opacity before each transition
+        .set(transitionStrip, { opacity: 0 }, transitionStart - 0.001)
+        // Framework 3 §3.5: Strip fade in (0-20% of transition)
         .to(
           transitionStrip,
           {
             opacity: 0.85,
-            duration: transitionDuration * 0.2
+            duration: transitionDuration * 0.2,
+            ease: 'power2.out'
           },
           transitionStart
         )
@@ -275,16 +331,18 @@
             autoAlpha: 1,
             xPercent: 0,
             duration: transitionDuration * 0.6,
-            ease: 'power2.out'
+            ease: 'power2.out',
+            immediateRender: false  // Don't apply "from" values at timeline start
           },
           transitionStart + transitionDuration * 0.4
         )
-        // Hide transition strip as iris expands
+        // Framework 3 §3.5: Strip fade out (70-95% of transition)
         .to(
           transitionStrip,
           {
             opacity: 0,
-            duration: transitionDuration * 0.25
+            duration: transitionDuration * 0.25,
+            ease: 'power2.in'
           },
           transitionStart + transitionDuration * 0.7
         )
@@ -309,19 +367,21 @@
           },
           transitionStart + transitionDuration * 0.95
         )
-        // Update active index and animate text
+        // Framework 3 §3.5: Subtle lens blip when crossing story boundaries
+        // State changes (activeIndex, displayTitle) are now handled by progress callback
         .call(
-          (i: number) => {
-            activeIndex = i;
-            syncFocusRing(i, true);
-            animateTextTransition(i);
-            // Framework 3 §3.5: Subtle lens blip when crossing story boundaries
+          () => {
             masterScrollController.triggerLensBlip();
           },
-          [index + 1],
+          undefined,
           transitionStart + transitionDuration * 0.5
         );
     });
+
+    // Timeline duration is auto-calculated from child tweens
+    // Using tl.progress(progress) maps scroll 0-100% to timeline 0-100% automatically
+    // No need to force duration - positions are designed as percentages (0.283 = 28.3%)
+    console.debug('[film-stories] timeline built', { duration: tl.duration() });
 
     timeline = tl;
 
@@ -380,9 +440,9 @@
     justifyContent: 'center',
     overflow: 'hidden',
     opacity: 0,
-    visibility: 'hidden',
-    // Zoom-out transition: starts full, contracts to center on exit
-    clipPath: 'circle(150% at 50% 50%)'
+    visibility: 'hidden'
+    // DESIGN SPEC: Zoom-out uses mask-image with torus pattern (not clipPath)
+    // mask-image is applied dynamically via zoomOutTransition.ts
   });
 
   const contentGridClass = css({

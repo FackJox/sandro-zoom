@@ -17,6 +17,7 @@
   import { createPortalTimeline } from './FilmEntryPortal';
   import { getVideoSources } from '$lib/utils/video';
   import { clientLogos, logosPortalHeading } from '$lib/data/logos';
+  import LensBarrelOverlay from '$lib/components/LensBarrelOverlay.svelte';
 
   let root: HTMLElement;
   let rail: HTMLElement;
@@ -29,6 +30,8 @@
   let portalVideo: HTMLVideoElement;
   let portalFrameEl: HTMLDivElement;
   let portalHeadingEl: HTMLDivElement;
+  let lensBarrelEl: HTMLDivElement;
+  let lensBarrelVisible = false;
   const portalVideoSrc = '/videos/wix-video.mp4';
   const portalVideoSources = getVideoSources(portalVideoSrc);
 
@@ -128,6 +131,8 @@
       portalVideo,
       portalFrame: portalFrameEl,
       portalHeading: portalHeadingEl,
+      lensBarrelEl,
+      onLensBarrelVisibleChange: (visible) => { lensBarrelVisible = visible; },
       orchestrator,
       onComplete: () => dispatch('portal:film-ready', { progress: 1 })
     });
@@ -397,6 +402,9 @@
         <source src={source.src} type={source.type} />
       {/each}
     </video>
+    <div bind:this={lensBarrelEl}>
+      <LensBarrelOverlay visible={lensBarrelVisible} label={logosPortalHeading} />
+    </div>
     <div class={portalFrame} bind:this={portalFrameEl} aria-hidden="true"></div>
     <div class={portalHeading} bind:this={portalHeadingEl}>{logosPortalHeading}</div>
   </div>

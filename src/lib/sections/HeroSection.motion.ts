@@ -102,7 +102,12 @@ export function initHeroTimelines(options: HeroTimelineOptions) {
 
     introTl
       .from(options.media, { opacity: 0, scale: 1.02, duration: 0.8 })
-      .from(options.slab, { yPercent: 15, opacity: 0, duration: 0.6 }, '-=0.45')
+      .fromTo(
+        options.slab,
+        { clipPath: 'inset(100% 0 0 0)' },
+        { clipPath: 'inset(0% 0 0 0)', duration: 0.6 },
+        '-=0.45'
+      )
       .from(options.lens, { scale: 0.8, opacity: 0, duration: 0.4 }, '-=0.35')
       .from(options.metadata, { y: 20, opacity: 0, duration: 0.4 }, '-=0.25');
 

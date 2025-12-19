@@ -25,5 +25,5 @@ export const clientLogos: ClientLogo[] = [
   { name: 'Scarpa', image: '/logos/scarpa.avif' }
 ];
 
-/** Portal heading shown during Logos → Film transition */
-export const logosPortalHeading = 'Film — High Altitude Features';
+/** Portal heading shown during Logos → Film transition - Framework 2 §3.2 */
+export const logosPortalHeading = '14 PEAKS / NETFLIX';

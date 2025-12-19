@@ -23,6 +23,8 @@ type BigFilmMotionOptions = {
   // Framework 2 §3.6: Concentric circles callbacks
   onConcentricShow?: (scale: number) => void;
   onConcentricHide?: () => void;
+  // Framework 2 §3.5 §C: Lens bug blip during card transitions
+  onLensBugBlip?: () => void;
 };
 
 export function initBigFilmMotion(options: BigFilmMotionOptions) {
@@ -172,33 +174,72 @@ export function initBigFilmMotion(options: BigFilmMotionOptions) {
       stop - 0.02
     );
 
-    // Framework 2 spec: card transitions 220-260ms (iris effect)
+    // Framework 2 §3.5 §C: Lens bug blip at transition start
+    timeline.call(
+      () => options.onLensBugBlip?.(),
+      undefined,
+      stop
+    );
+
+    // Framework 2 §3.5: Card transitions with iris/lens zoom effect (220-260ms total)
+    // Phase 1: Zoom-out effect - circle shrinks + scale down (shows "wider framing")
+    // Both cards visible simultaneously for inside-circle crossfade
     timeline
       .to(
         current,
         {
-          clipPath: 'circle(0% at 50% 50%)',
-          autoAlpha: 0.35,
-          duration: 0.24 // 240ms (middle of 220-260ms spec range)
+          clipPath: 'circle(80% at 50% 50%)', // Shrink circle to 80%
+          scale: 0.92, // Scale down (zoom out effect - sees wider framing)
+          autoAlpha: 0.6, // Partial fade for crossfade effect
+          duration: 0.12 // 120ms (first half)
         },
         stop
       )
+      // SIMULTANEOUS: next card starts as current is mid-transition (inside-circle crossfade)
       .fromTo(
         next,
-        { clipPath: 'circle(0% at 50% 50%)', autoAlpha: 0 },
-        { clipPath: 'circle(150% at 50% 50%)', autoAlpha: 1, duration: 0.26 }, // 260ms
-        stop + 0.05
+        { clipPath: 'circle(0% at 50% 50%)', autoAlpha: 0, scale: 1 },
+        {
+          clipPath: 'circle(80% at 50% 50%)',
+          autoAlpha: 0.8,
+          duration: 0.12 // Same timing = inside-circle crossfade
+        },
+        stop // Same position = simultaneous
       )
-      .call(() => options.onStepChange?.(index + 1), undefined, stop + 0.02);
+      // Phase 2: Snap open - current continues fading out, next snaps to full
+      .to(
+        current,
+        {
+          clipPath: 'circle(0% at 50% 50%)',
+          autoAlpha: 0,
+          scale: 0.88,
+          duration: 0.12,
+          ease: 'power2.in' // Accelerate out
+        },
+        stop + 0.12
+      )
+      .to(
+        next,
+        {
+          clipPath: 'circle(150% at 50% 50%)',
+          autoAlpha: 1,
+          scale: 1,
+          duration: 0.14,
+          ease: 'power2.out' // Quick snap open (like iris snapping open)
+        },
+        stop + 0.12
+      )
+      .call(() => options.onStepChange?.(index + 1), undefined, stop + 0.12);
 
     // Framework 2 §3.2: Hide lens barrel after transition completes
     timeline.call(
       () => options.onLensBarrelHide?.(),
       undefined,
-      stop + 0.15
+      stop + 0.26
     );
 
     // Animate slab text lines with stagger per Framework 2 spec
+    // Starts after Phase 2 begins (snap open phase)
     if (slabLines.length > 0) {
       timeline.fromTo(
         slabLines,
@@ -210,7 +251,7 @@ export function initBigFilmMotion(options: BigFilmMotionOptions) {
           stagger: TEXT_STAGGER_MS,
           ease: brandEase
         },
-        stop + 0.05
+        stop + 0.14
       );
     } else {
       // Fallback: animate whole slab if no lines provided
@@ -218,7 +259,7 @@ export function initBigFilmMotion(options: BigFilmMotionOptions) {
         options.slab,
         { yPercent: 6, autoAlpha: 0 },
         { yPercent: 0, autoAlpha: 1, duration: 0.35 },
-        stop + 0.05
+        stop + 0.14
       );
     }
   });

@@ -458,32 +458,36 @@ export function initAboutTimeline(options: AboutMotionOptions): () => void {
   // Beat 3 (Values) special stagger animation (Framework 4 §5.3)
   // Triggers AFTER beat 3 is fully visible, not during transition
   if (valuesLine1 && valuesLine2) {
-    gsap.set(valuesLine1, { opacity: 0 });
-    gsap.set(valuesLine2, { opacity: 0, y: 30 });
+    // Establish initial states at timeline position 0
+    // This ensures proper state when scrubbing backwards
+    tl.set([valuesLine1, valuesLine2], { opacity: 0, filter: 'none' }, 0);
+    tl.set(valuesLine2, { y: 30 }, 0);
 
     // Beat 3 starts at 0.66, fully revealed by ~0.72
     // Stagger starts at 0.74 (after beat is settled)
     const valuesRevealStart = 0.74;
 
-    tl.to(valuesLine1, {
-      opacity: 1,
-      duration: 0.05
-    }, valuesRevealStart);
-
-    // Line 2 slides up on "slight downward scroll" (spec)
-    tl.to(valuesLine2, {
-      opacity: 1,
-      y: 0,
-      duration: 0.08,
-      ease: brandEase
-    }, valuesRevealStart + 0.04);
+    // Values lines fade in with stagger
+    tl.to(valuesLine1, { opacity: 1, duration: 0.05 }, valuesRevealStart);
+    tl.to(valuesLine2, { opacity: 1, y: 0, duration: 0.08, ease: brandEase }, valuesRevealStart + 0.04);
   }
 
   // Exit transition to Services (Framework 4 §6)
   const exitStart = 0.88;
   const valuesTextRef = beats[2]?.textRef;
 
-  // Step 1: Tighten focus on final lines
+  // Initialize exit elements at position 0
+  if (exitFocusRing) {
+    tl.set(exitFocusRing, { opacity: 0, scale: 1 }, 0);
+  }
+  if (servicesGhostGrid) {
+    tl.set(servicesGhostGrid, { opacity: 0 }, 0);
+  }
+  if (valuesTextRef) {
+    tl.set(valuesTextRef, { scale: 1, filter: 'blur(0px)' }, 0);
+  }
+
+  // Step 1: Tighten focus on final lines (brightness filter)
   if (valuesLine1 && valuesLine2) {
     tl.to([valuesLine1, valuesLine2], {
       filter: 'brightness(1.15) contrast(1.05)',
@@ -493,16 +497,12 @@ export function initAboutTimeline(options: AboutMotionOptions): () => void {
 
   // Step 2: Ring appears around text block
   if (exitFocusRing) {
-    tl.to(exitFocusRing, { opacity: 1, scale: 1, duration: 0.03 }, exitStart + 0.02);
+    tl.to(exitFocusRing, { opacity: 1, duration: 0.03 }, exitStart + 0.02);
   }
 
   // Step 3: Zoom out
   if (valuesTextRef) {
-    tl.to(valuesTextRef, {
-      scale: 0.92,
-      filter: 'blur(1px)',
-      duration: 0.04
-    }, exitStart + 0.04);
+    tl.to(valuesTextRef, { scale: 0.92, filter: 'blur(1px)', duration: 0.04 }, exitStart + 0.04);
   }
 
   if (exitFocusRing) {

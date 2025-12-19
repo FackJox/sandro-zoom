@@ -7,6 +7,11 @@ import {
   isZoomOutSection,
   buildZoomOutSegment,
   initSectionForZoomOut,
+  resetSectionMask,
+  setSectionToRemnant,
+  hideSectionMask,
+  getTorusMask,
+  applyZoomOutProgress,
   type SectionRole,
   type ZoomOutSectionRefs
 } from './zoomOutTransition';
@@ -459,6 +464,67 @@ function applySectionVisibility(
 
     // Use GSAP autoAlpha for proper visibility management
     gsap.set(element, { autoAlpha: shouldBeVisible ? 1 : 0, zIndex });
+
+    // DESIGN SPEC: Apply mask-image for zoom-out sections
+    // Uses torus (donut) mask with inner radius shrinking faster than outer
+    // This creates the "camera pulling back" depth effect
+    if (isZoomOutSection(name)) {
+      // Check each transition to see if this section is involved
+      let maskApplied = false;
+
+      for (const transition of ZOOM_OUT_TRANSITIONS) {
+        const config = SECTION_SEGMENTS[transition.from];
+        const zoneStart = config.start + config.duration * 0.85;
+        const zoneEnd = config.start + config.duration;
+        const zoneDuration = zoneEnd - zoneStart;
+
+        if (transition.from === name && scrollVH >= zoneStart && scrollVH < zoneEnd) {
+          // This section is exiting - apply zoom-out contraction
+          const progress = (scrollVH - zoneStart) / zoneDuration;
+          applyZoomOutProgress(element, progress, 'exiting');
+          maskApplied = true;
+          break;
+        }
+
+        // Check if this section is a remnant from a previous transition
+        const fromIndex = ZOOM_OUT_TRANSITIONS.findIndex(t => t.from === name);
+        if (fromIndex >= 0 && fromIndex < ZOOM_OUT_TRANSITIONS.indexOf(transition)) {
+          // This section exited in a previous transition
+          // Check if the next transition's zone is active (remnant shrinking)
+          if (scrollVH >= zoneStart && scrollVH < zoneStart + zoneDuration * 0.4) {
+            // Remnant is shrinking during first 40% of next transition
+            const remnantProgress = (scrollVH - zoneStart) / (zoneDuration * 0.4);
+            applyZoomOutProgress(element, remnantProgress, 'remnant');
+            maskApplied = true;
+            break;
+          } else if (scrollVH >= zoneStart + zoneDuration * 0.4) {
+            // Remnant has fully disappeared
+            hideSectionMask(element);
+            maskApplied = true;
+            break;
+          } else if (scrollVH >= SECTION_SEGMENTS[transition.from].start) {
+            // Between transitions - show as remnant
+            setSectionToRemnant(element);
+            maskApplied = true;
+            break;
+          }
+        }
+      }
+
+      // If no transition applies, set default mask based on visibility
+      if (!maskApplied) {
+        if (shouldBeVisible) {
+          if (role === 'remnant') {
+            setSectionToRemnant(element);
+          } else {
+            // Full visibility
+            resetSectionMask(element);
+          }
+        } else {
+          hideSectionMask(element);
+        }
+      }
+    }
   }
 }
 

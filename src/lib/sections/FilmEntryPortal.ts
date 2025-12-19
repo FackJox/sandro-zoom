@@ -14,6 +14,8 @@ type CreatePortalTimelineOptions = {
   portalVideo?: HTMLVideoElement | null;
   portalFrame?: HTMLElement | null;
   portalHeading?: HTMLElement | null;
+  lensBarrelEl?: HTMLElement | null;
+  onLensBarrelVisibleChange?: (visible: boolean) => void;
   orchestrator?: ScrollOrchestrator;
   onComplete?: () => void;
 };
@@ -75,6 +77,8 @@ export function createPortalTimeline(options: CreatePortalTimelineOptions) {
     videoTarget: options.portalVideo ?? undefined,
     frameElement: options.portalFrame ?? undefined,
     headingElement: options.portalHeading ?? undefined,
+    lensBarrelElement: options.lensBarrelEl ?? undefined,
+    onLensBarrelVisibleChange: options.onLensBarrelVisibleChange,
     expandWidth: '70vw',
     expandHeight: '70vw',
     frameWidth: '92vw',
@@ -82,16 +86,18 @@ export function createPortalTimeline(options: CreatePortalTimelineOptions) {
     onReveal: options.onComplete
   });
 
+  // Framework 2 §3.2: "The rest of the logos strip fades slightly"
+  // When the portal circle appears over Netflix, other logos should dim
   timeline
     .fromTo(
       options.rail,
       { scale: 1, opacity: 1 },
-      { scale: 0.9, opacity: 0.25, duration: 0.6 },
-      0
+      { scale: 0.92, opacity: 0.15, duration: 0.5, ease: 'power2.out' },
+      0.15 // Start fading when portal appears
     )
-    .to(options.rail, { opacity: 0, duration: 0.3 }, '>-0.2')
+    .to(options.rail, { opacity: 0, scale: 0.85, duration: 0.35 }, '>-0.15')
     .to(options.root, { backgroundColor: 'var(--colors-blackStallion)' }, 0.2)
-    .to(options.root, { filter: 'brightness(0.65)' }, 0.35);
+    .to(options.root, { filter: 'brightness(0.6)' }, 0.3);
 
   const disposeTimeline = options.orchestrator
     ? options.orchestrator.registerSectionTimeline('logos:portal', () => timeline)

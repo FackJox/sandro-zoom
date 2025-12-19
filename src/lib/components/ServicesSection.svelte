@@ -120,41 +120,6 @@
       paused: true
     });
 
-    // Register with master scroll controller for progress updates
-    const unsubscribeMaster = masterScrollController.onSectionProgress('services', (progress, isActive) => {
-      tl.progress(progress);
-
-      // Handle lens attachment based on active state
-      if (isActive && !wasActive) {
-        console.debug('[services] enter');
-        attachLensToSection('services');
-      } else if (!isActive && wasActive && progress >= 0.95) {
-        console.debug('[services] leave → finalContact');
-        attachLensToSection('finalContact');
-      } else if (!isActive && wasActive && progress <= 0.05) {
-        console.debug('[services] leaveBack → about');
-        attachLensToSection('about');
-      }
-      wasActive = isActive;
-    });
-
-    // Register section element with master controller
-    const unregisterSection = masterScrollController.registerSection('services', root, tl);
-
-    // Store cleanup
-    (tl as any).__masterCleanup = () => {
-      unsubscribeMaster();
-      unregisterSection();
-    };
-
-    // Initial states
-    gsap.set(videoLayer, { opacity: 1 });
-    gsap.set(vignetteOverlay, { opacity: 0 });
-    gsap.set(creditsLabel, { autoAlpha: 0, y: 20 });
-    // Credits start below viewport center
-    gsap.set(creditLines, { autoAlpha: 0, yPercent: 100 });
-    gsap.set(cta, { autoAlpha: 0, y: 40 });
-
     /**
      * Timeline structure per Framework 5:
      * 0.00-0.15: Video visible at full opacity
@@ -165,26 +130,58 @@
      * 0.90-1.00: Portal mask exit
      */
 
-    // 0.00-0.15: Video visible (no animation needed, just hold)
+    // Establish EXPLICIT initial states at timeline position 0
+    // This ensures proper GSAP scrubbing behavior when scrolling backwards
+    tl.addLabel('init', 0);
+    tl.set(videoLayer, { opacity: 1 }, 'init');
+    tl.set(vignetteOverlay, { opacity: 0 }, 'init');
+    tl.set(creditsLabel, { autoAlpha: 0, y: 20 }, 'init');
+    tl.set(creditLines, { autoAlpha: 0, yPercent: 100 }, 'init');
+    tl.set(cta, { autoAlpha: 0, y: 40 }, 'init');
+
+    // 0.00-0.15: Video visible (holding at full opacity)
     tl.addLabel('videoHold', 0);
 
     // 0.15-0.35: Video fades with lens vignette closing effect
     tl.addLabel('videoFade', TIMELINE.VIDEO_FADE_START);
-    // Vignette closes in (lens closing effect)
-    tl.to(vignetteOverlay, {
-      opacity: 1,
-      duration: 0.2,
-      ease: 'power2.inOut'
-    }, 'videoFade');
-    // Video fades out behind vignette
-    tl.to(videoLayer, {
-      opacity: 0,
-      duration: 0.2
-    }, 'videoFade+=0.05');
+
+    // Vignette: hold at 0 until 15%, then fade in to 35%
+    // Use explicit fromTo to prevent "current value" inference issues in scrubbed timelines
+    tl.fromTo(vignetteOverlay,
+      { opacity: 0 },
+      { opacity: 0, duration: TIMELINE.VIDEO_FADE_START, immediateRender: false },
+      0
+    );
+    tl.fromTo(vignetteOverlay,
+      { opacity: 0 },
+      { opacity: 1, duration: TIMELINE.VIDEO_FADE_END - TIMELINE.VIDEO_FADE_START, ease: 'power2.inOut', immediateRender: false },
+      TIMELINE.VIDEO_FADE_START
+    );
+
+    // Video: hold at 1 until 20%, then fade out to 40%
+    const videoFadeStart = TIMELINE.VIDEO_FADE_START + 0.05; // 0.20
+    const videoFadeEnd = TIMELINE.VIDEO_FADE_END + 0.05;     // 0.40
+
+    // Hold tween keeps video at opacity 1 from 0 to 0.20 (explicit from/to both 1)
+    tl.fromTo(videoLayer,
+      { opacity: 1 },
+      { opacity: 1, duration: videoFadeStart, immediateRender: false },
+      0
+    );
+    // Fade tween takes video from 1 to 0 from 0.20 to 0.40
+    tl.fromTo(videoLayer,
+      { opacity: 1 },
+      { opacity: 0, duration: videoFadeEnd - videoFadeStart, ease: brandEase, immediateRender: false },
+      videoFadeStart
+    );
 
     // 0.35-0.45: Credits label fades in
     tl.addLabel('labelIn', TIMELINE.LABEL_IN_START);
-    tl.to(creditsLabel, { autoAlpha: 1, y: 0, duration: 0.1 }, 'labelIn');
+    tl.fromTo(creditsLabel,
+      { autoAlpha: 0, y: 20 },
+      { autoAlpha: 1, y: 0, duration: 0.1 },
+      'labelIn'
+    );
 
     // 0.45-0.80: Credit lines scroll through "hero line" center
     // Each line: rises from below → holds at center (hero position) → continues upward
@@ -199,12 +196,12 @@
       const lineStart = TIMELINE.CREDITS_START + i * creditDuration;
 
       // Phase 1: Enter from below to center (hero position)
-      tl.to(line, {
-        autoAlpha: 1,
-        yPercent: 0,
-        duration: enterDuration,
-        ease: brandEase
-      }, lineStart);
+      // Use fromTo for robust scrubbing
+      tl.fromTo(line,
+        { autoAlpha: 0, yPercent: 100 },
+        { autoAlpha: 1, yPercent: 0, duration: enterDuration, ease: brandEase },
+        lineStart
+      );
 
       // Phase 2: Hold at center (hero line)
       // No animation needed - just a pause at yPercent: 0
@@ -214,18 +211,21 @@
 
       // Don't exit the last line - it stays visible with CTA
       if (i < creditLines.length - 1) {
-        tl.to(line, {
-          yPercent: -80,
-          autoAlpha: 0.3,
-          duration: exitDuration,
-          ease: 'power1.in'
-        }, exitStart);
+        tl.fromTo(line,
+          { yPercent: 0, autoAlpha: 1 },
+          { yPercent: -80, autoAlpha: 0.3, duration: exitDuration, ease: 'power1.in' },
+          exitStart
+        );
       }
     });
 
     // 0.80-0.90: CTA fades in with subtle rise
     tl.addLabel('ctaIn', TIMELINE.CTA_START);
-    tl.to(cta, { autoAlpha: 1, y: 0, duration: 0.1 }, 'ctaIn');
+    tl.fromTo(cta,
+      { autoAlpha: 0, y: 40 },
+      { autoAlpha: 1, y: 0, duration: 0.1 },
+      'ctaIn'
+    );
 
     // 0.90-1.00: Portal mask exit animation
     tl.addLabel('portalExit', TIMELINE.PORTAL_START);
@@ -252,6 +252,41 @@
         }
       });
     }, undefined, 'portalExit');
+
+    // Add no-op tween at position 1.0 to ensure timeline has exactly unit duration
+    // This is critical for percentage-based progress control
+    // Labels alone don't extend duration - only tweens do
+    tl.set(root, { clearProps: 'none' }, 1);
+
+    // Ensure timeline starts at position 0
+    tl.progress(0);
+
+    // NOW register with master scroll controller (after timeline is fully built)
+    const unsubscribeMaster = masterScrollController.onSectionProgress('services', (progress, isActive) => {
+      tl.progress(progress);
+
+      // Handle lens attachment based on active state
+      if (isActive && !wasActive) {
+        console.debug('[services] enter');
+        attachLensToSection('services');
+      } else if (!isActive && wasActive && progress >= 0.95) {
+        console.debug('[services] leave → finalContact');
+        attachLensToSection('finalContact');
+      } else if (!isActive && wasActive && progress <= 0.05) {
+        console.debug('[services] leaveBack → about');
+        attachLensToSection('about');
+      }
+      wasActive = isActive;
+    });
+
+    // Register section element with master controller
+    const unregisterSection = masterScrollController.registerSection('services', root, tl);
+
+    // Store cleanup
+    (tl as any).__masterCleanup = () => {
+      unsubscribeMaster();
+      unregisterSection();
+    };
 
     timeline = tl;
     if (orchestrator) {

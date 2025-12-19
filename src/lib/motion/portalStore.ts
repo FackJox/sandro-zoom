@@ -13,6 +13,8 @@ export interface PortalTimelineOptions {
   frameHeight?: number | string;
   frameElement?: HTMLElement | null;
   headingElement?: HTMLElement | null;
+  lensBarrelElement?: HTMLElement | null;
+  onLensBarrelVisibleChange?: (visible: boolean) => void;
 }
 
 export interface PortalTimelineHandle {
@@ -70,6 +72,12 @@ export function createPortalContext(id = 'primary'): PortalContext {
     const frameWidth = options.frameWidth ?? '92vw';
     const frameHeight = options.frameHeight ?? '38.5vw';
 
+    // Framework 2 §3.2: Portal timeline with lens barrel UI
+    // - Circle iris appears over Netflix logo
+    // - Circle EXPANDS (zoom IN) to fill screen
+    // - Crossfade Netflix logo → 14 Peaks video INSIDE circle
+    // - Lens barrel UI appears during expansion
+    // - Circle edges "square off quickly" at the end
     timeline
       .set(
         portal,
@@ -86,6 +94,7 @@ export function createPortalContext(id = 'primary'): PortalContext {
         0
       )
       .to(portal, { opacity: 1, duration: 0.2 }, 0)
+      // Expand portal circle
       .to(
         portal,
         {
@@ -95,27 +104,38 @@ export function createPortalContext(id = 'primary'): PortalContext {
         },
         0.3
       )
-      .to(portal, { borderRadius: '24px', duration: 0.35 }, 0.5)
+      // Show lens barrel during expansion (Framework 2 §3.2)
+      .call(() => options.onLensBarrelVisibleChange?.(true), undefined, 0.35)
+      // Gradual squareoff during mid-expansion
+      .to(portal, { borderRadius: '32px', duration: 0.3 }, 0.55)
+      // Quick squareoff at the end - "edges square off quickly like iris opens → full sensor"
       .to(
         portal,
         {
           width: frameWidth,
           height: frameHeight,
           borderRadius: '8px',
-          duration: 0.45
+          duration: 0.25,
+          ease: 'power2.out'
         },
-        0.8
+        0.85
       )
+      // Hide lens barrel before final frame appears
+      .call(() => options.onLensBarrelVisibleChange?.(false), undefined, 0.9)
       .call(() => options.onReveal?.(), undefined, '>-0.05')
       .to(portal, { opacity: 0, duration: 0.4 }, '+=0.25');
 
+    // Improved crossfade: Netflix logo and video overlap more (Framework 2 §3.2)
+    // "Inside the circle, we crossfade from Netflix logo → 14 Peaks still/video frame"
     if (options.textTarget) {
-      timeline.to(options.textTarget, { opacity: 0, duration: 0.3 }, 0.35);
+      // Start fading logo earlier, longer duration for overlap
+      timeline.to(options.textTarget, { opacity: 0, duration: 0.35 }, 0.3);
     }
 
     if (options.videoTarget) {
-      timeline.set(options.videoTarget, { opacity: 0 }, 0.3);
-      timeline.to(options.videoTarget, { opacity: 1, duration: 0.4 }, 0.45);
+      // Start video fade earlier to overlap with logo fade
+      timeline.set(options.videoTarget, { opacity: 0 }, 0.25);
+      timeline.to(options.videoTarget, { opacity: 1, duration: 0.45 }, 0.35);
     }
 
     if (options.frameElement) {

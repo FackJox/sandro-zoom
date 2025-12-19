@@ -58,9 +58,61 @@ export function getTorusMask(innerRadius: number, outerRadius: number): string {
 /**
  * Apply mask-image with webkit prefix for cross-browser support
  */
-function applyMaskImage(element: HTMLElement, mask: string): void {
+export function applyMaskImage(element: HTMLElement, mask: string): void {
   element.style.maskImage = mask;
   element.style.webkitMaskImage = mask;
+}
+
+/**
+ * Calculate the current mask values for a zoom-out transition
+ * based on scroll progress within the transition zone.
+ *
+ * @param progress - 0-1 progress through the transition zone
+ * @returns { inner, outer } radius values for torus mask
+ */
+export function calculateZoomOutMask(progress: number): { inner: number; outer: number } {
+  // Clamp progress to 0-1
+  const p = Math.max(0, Math.min(1, progress));
+
+  // DESIGN SPEC: Inner shrinks faster than outer → ring thickens
+  // Use custom easing to make inner shrink faster (steeper curve)
+  const innerProgress = gsap.utils.clamp(0, 1, p * 1.2); // Inner reaches 0 faster
+  const outerProgress = p;
+
+  // Interpolate from start to end
+  const inner = TORUS_START.inner - (TORUS_START.inner - TORUS_END.inner) * innerProgress;
+  const outer = TORUS_START.outer - (TORUS_START.outer - TORUS_REMNANT.outer) * outerProgress;
+
+  return { inner: Math.max(0, inner), outer: Math.max(0, outer) };
+}
+
+/**
+ * Apply zoom-out mask for a section based on transition progress.
+ * Call this from the scroll update loop for smooth animation.
+ *
+ * @param element - Section element to mask
+ * @param progress - 0-1 progress through the transition zone
+ * @param role - 'exiting' | 'remnant' | 'full'
+ */
+export function applyZoomOutProgress(
+  element: HTMLElement,
+  progress: number,
+  role: 'exiting' | 'remnant' | 'full'
+): void {
+  if (role === 'full') {
+    // Full visibility
+    applyMaskImage(element, getTorusMask(0, 150));
+  } else if (role === 'remnant') {
+    // Remnant shrinking (first 40% of next transition)
+    // Progress 0 = full remnant (12%), progress 1 = gone (0%)
+    const remnantProgress = Math.max(0, Math.min(1, progress));
+    const outer = TORUS_REMNANT.outer - (TORUS_REMNANT.outer - TORUS_GONE.outer) * remnantProgress;
+    applyMaskImage(element, getTorusMask(0, Math.max(0, outer)));
+  } else {
+    // Exiting - main zoom-out contraction
+    const { inner, outer } = calculateZoomOutMask(progress);
+    applyMaskImage(element, getTorusMask(inner, outer));
+  }
 }
 
 export interface ZoomOutSectionRefs {
@@ -112,8 +164,13 @@ function prefersReducedMotion(): boolean {
 
 /**
  * Build a single zoom-out transition timeline segment
- * Uses clipPath circle for consistency with section visibility.
- * Exiting section contracts to a small remnant circle while incoming section parallaxes in.
+ *
+ * DESIGN SPEC (docs/plans/2025-12-07-zoom-out-reveal-design.md):
+ * - Uses mask-image with torus (donut) radial-gradient pattern
+ * - Inner radius shrinks FASTER than outer → ring thickens as it contracts
+ * - Creates "camera pulling back" depth effect
+ *
+ * Exiting section contracts via torus mask while incoming section parallaxes in.
  * Respects prefers-reduced-motion by skipping parallax animations.
  */
 export function buildZoomOutSegment(
@@ -131,27 +188,66 @@ export function buildZoomOutSegment(
   }
 
   // 1. Remnant from previous transition shrinks to nothing
-  // Uses clipPath for consistency with section visibility
+  // Animate torus mask from small circle to fully transparent
   if (remnantSection?.root) {
+    // Create proxy object for GSAP to animate
+    const remnantMaskState = { inner: TORUS_REMNANT.inner, outer: TORUS_REMNANT.outer };
+    const remnantElement = remnantSection.root;
+
+    // Initialize mask-image
+    applyMaskImage(remnantElement, getTorusMask(remnantMaskState.inner, remnantMaskState.outer));
+
     tl.to(
-      remnantSection.root,
+      remnantMaskState,
       {
-        clipPath: CLIP_GONE,
+        inner: TORUS_GONE.inner,
+        outer: TORUS_GONE.outer,
         duration: duration * 0.4,
-        ease: 'power2.in'
+        ease: 'power2.in',
+        onUpdate: () => {
+          applyMaskImage(remnantElement, getTorusMask(remnantMaskState.inner, remnantMaskState.outer));
+        },
+        onComplete: () => {
+          // Ensure final state is applied
+          applyMaskImage(remnantElement, getTorusMask(TORUS_GONE.inner, TORUS_GONE.outer));
+        }
       },
       0
     );
   }
 
-  // 2. Current section: contract from full to remnant circle
-  // clipPath provides smoother, more consistent transitions than mask-image
+  // 2. Current section: contract from full to remnant using torus mask
+  // DESIGN SPEC: Inner radius shrinks FASTER than outer → ring thickens
+  // This creates the "camera pulling back" depth effect
+  //
+  // Animation path:
+  // - Start: inner=140%, outer=150% (thin ring at edge, content visible)
+  // - Mid:   inner=40%,  outer=80%  (thick ring, content shrinking)
+  // - End:   inner=0%,   outer=12%  (small filled circle remnant)
+  const exitingMaskState = { inner: TORUS_START.inner, outer: TORUS_START.outer };
+  const exitingElement = exitingSection.root;
+
+  // Initialize with full visibility (torus at edge)
+  applyMaskImage(exitingElement, getTorusMask(exitingMaskState.inner, exitingMaskState.outer));
+
+  // Animate inner radius with steeper curve (shrinks faster)
+  // This creates the ring thickening effect
   tl.to(
-    exitingSection.root,
+    exitingMaskState,
     {
-      clipPath: CLIP_REMNANT,
+      // Inner shrinks faster (steeper curve) → ring thickens
+      inner: TORUS_END.inner,
+      // Outer shrinks slower → visible area reduces gradually
+      outer: TORUS_REMNANT.outer,
       duration: duration,
-      ease: 'power2.inOut'
+      ease: 'power2.inOut',
+      onUpdate: () => {
+        applyMaskImage(exitingElement, getTorusMask(exitingMaskState.inner, exitingMaskState.outer));
+      },
+      onComplete: () => {
+        // Ensure final remnant state
+        applyMaskImage(exitingElement, getTorusMask(TORUS_END.inner, TORUS_REMNANT.outer));
+      }
     },
     0
   );
@@ -311,17 +407,43 @@ export function applySectionZIndex(
 
 /**
  * Initialize section for zoom-out system
- * Sets initial clipPath and visibility
+ * Sets initial mask-image (torus pattern) and visibility
+ *
+ * DESIGN SPEC: Uses mask-image with radial-gradient for torus effect
  */
 export function initSectionForZoomOut(
   section: HTMLElement,
   isInitiallyVisible: boolean
 ): void {
-  // Use full clipPath circle for initial visibility
+  // Use full torus mask (content visible through center)
+  // Start with inner=0 (filled circle) at full size
+  applyMaskImage(section, getTorusMask(0, 150));
+
   gsap.set(section, {
-    clipPath: CLIP_FULL,
     autoAlpha: isInitiallyVisible ? 1 : 0
   });
+}
+
+/**
+ * Reset section mask to full visibility
+ * Call this when section becomes the current/active section
+ */
+export function resetSectionMask(section: HTMLElement): void {
+  applyMaskImage(section, getTorusMask(0, 150));
+}
+
+/**
+ * Set section to remnant state (small circle in center)
+ */
+export function setSectionToRemnant(section: HTMLElement): void {
+  applyMaskImage(section, getTorusMask(TORUS_END.inner, TORUS_REMNANT.outer));
+}
+
+/**
+ * Hide section completely via mask
+ */
+export function hideSectionMask(section: HTMLElement): void {
+  applyMaskImage(section, getTorusMask(TORUS_GONE.inner, TORUS_GONE.outer));
 }
 
 /**

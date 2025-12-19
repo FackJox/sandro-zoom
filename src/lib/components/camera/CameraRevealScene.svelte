@@ -1,6 +1,8 @@
 <script lang="ts">
   import { Canvas, T } from '@threlte/core';
   import { css } from '$styled-system/css';
+  import { onMount, onDestroy } from 'svelte';
+  import { gsap } from '$lib/motion';
   import type { Object3D } from 'three';
   import CameraModel from './CameraModel.svelte';
   import LCDOverlay from './LCDOverlay.svelte';
@@ -12,6 +14,7 @@
    * - Threlte Canvas with camera model
    * - CSS 3D LCD overlay
    * - Scenic background
+   * - Lens glass reflection animation (Framework 5 §4.3)
    *
    * All positioning props are exposed for debug adjustment.
    */
@@ -70,6 +73,58 @@
     onModelLoad
   }: Props = $props();
 
+  // Lens glass reflection animation (Framework 5 §4.3)
+  let lensReflectionElement: HTMLDivElement;
+  let reflectionTimeline: gsap.core.Timeline | null = null;
+
+  /**
+   * Setup subtle lens glass reflection animation
+   * Creates a gentle, slow-moving highlight effect over the camera lens area
+   */
+  function setupLensReflection() {
+    if (!lensReflectionElement) return;
+
+    // Check for reduced motion preference
+    if (typeof window !== 'undefined' && window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+      return;
+    }
+
+    reflectionTimeline = gsap.timeline({ repeat: -1, yoyo: true });
+
+    // Subtle position shift simulating light catching glass
+    reflectionTimeline
+      .to(lensReflectionElement, {
+        x: 8,
+        y: -5,
+        opacity: 0.25,
+        duration: 4,
+        ease: 'sine.inOut'
+      })
+      .to(lensReflectionElement, {
+        x: -4,
+        y: 3,
+        opacity: 0.15,
+        duration: 3.5,
+        ease: 'sine.inOut'
+      })
+      .to(lensReflectionElement, {
+        x: 2,
+        y: -2,
+        opacity: 0.2,
+        duration: 4.5,
+        ease: 'sine.inOut'
+      });
+  }
+
+  onMount(() => {
+    setupLensReflection();
+  });
+
+  onDestroy(() => {
+    reflectionTimeline?.kill();
+    reflectionTimeline = null;
+  });
+
   const containerClass = css({
     position: 'relative',
     width: '100%',
@@ -97,6 +152,29 @@
     zIndex: 2,
     perspective: '1000px',
     perspectiveOrigin: '50% 50%',
+  });
+
+  /**
+   * Lens glass reflection overlay
+   * Positioned over the camera lens area with subtle animated highlight
+   * Framework 5 §4.3: "Lens glass might catch a very subtle animated reflection"
+   */
+  const lensReflectionClass = css({
+    position: 'absolute',
+    // Position over the camera lens (bottom-right area where camera is)
+    bottom: '38%',
+    right: '18%',
+    width: '60px',
+    height: '60px',
+    borderRadius: '50%',
+    // Subtle white highlight gradient
+    background: 'radial-gradient(ellipse at 30% 30%, rgba(255, 255, 255, 0.4) 0%, rgba(255, 255, 255, 0.1) 30%, transparent 70%)',
+    opacity: 0.2,
+    pointerEvents: 'none',
+    mixBlendMode: 'overlay',
+    zIndex: 3,
+    // Slight blur for soft glass reflection effect
+    filter: 'blur(2px)',
   });
 </script>
 
@@ -153,4 +231,11 @@
       scale={lcdTransform.scale}
     />
   </div>
+
+  <!-- Lens glass reflection (Framework 5 §4.3) -->
+  <div
+    class={lensReflectionClass}
+    bind:this={lensReflectionElement}
+    aria-hidden="true"
+  ></div>
 </div>

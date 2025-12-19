@@ -12,10 +12,12 @@
   import { lensElement, lensAttachment } from '$lib/motion/lensTimeline';
   import LensBarrelOverlay from './LensBarrelOverlay.svelte';
   import ConcentricCircles from './ConcentricCircles.svelte';
+  import FilmToStoriesFocusOverlay from './FilmToStoriesFocusOverlay.svelte';
   import {
     SCROLL_ORCHESTRATOR_CONTEXT_KEY,
     type ScrollOrchestrator,
     gsap,
+    brandEase,
     masterScrollController
   } from '$lib/motion';
 
@@ -52,6 +54,35 @@
   // Concentric circles for exit transition (Framework 2 §3.6)
   let concentricVisible = false;
   let concentricScale = 1;
+
+  // Focus overlay rect for exit transition (Framework 2 §3.6)
+  // Receives rect from FilmExitPortal when portal is ready
+  let focusOverlayRect: DOMRect | null = null;
+
+  // Framework 2 §3.5 §C: Lens bug blip animation during card transitions
+  // "Subtle rotation or tiny scale blip (like a record light reacting)"
+  function triggerLensBugBlip() {
+    if (!lensNode) return;
+
+    // Cancel any existing blip animation
+    gsap.killTweensOf(lensNode, 'rotation,scale');
+
+    // Subtle blip: 5° rotation + 2% scale, then return
+    gsap.to(lensNode, {
+      rotation: 5,
+      scale: 1.02,
+      duration: 0.1,
+      ease: brandEase,
+      onComplete: () => {
+        gsap.to(lensNode, {
+          rotation: 0,
+          scale: 1,
+          duration: 0.15,
+          ease: brandEase
+        });
+      }
+    });
+  }
 
   const lensElementUnsub = lensElement.subscribe((node) => {
     lensNode = node;
@@ -159,6 +190,11 @@
       onComplete: () => {
         console.debug('[big-film] timeline complete');
       },
+      // Framework 2 §3.6: Portal ready callback - capture focus rect for overlay
+      onPortalReady: (detail) => {
+        console.debug('[big-film] portal ready with focusRect', detail.focusRect);
+        focusOverlayRect = detail.focusRect;
+      },
       // Framework 2 §3.2: Lens barrel callbacks
       onLensBarrelShow: (label: string) => {
         lensBarrelLabel = label;
@@ -174,7 +210,9 @@
       },
       onConcentricHide: () => {
         concentricVisible = false;
-      }
+      },
+      // Framework 2 §3.5 §C: Lens bug blip during card transitions
+      onLensBugBlip: triggerLensBugBlip
     });
 
     // Register parallax targets for zoom-out transitions
@@ -263,9 +301,9 @@
     color: 'text',
     overflow: 'hidden',
     opacity: 0,
-    visibility: 'hidden',
-    // Zoom-out transition: starts full, contracts to center on exit
-    clipPath: 'circle(150% at 50% 50%)'
+    visibility: 'hidden'
+    // DESIGN SPEC: Zoom-out uses mask-image with torus pattern (not clipPath)
+    // mask-image is applied dynamically via zoomOutTransition.ts
   });
 
   const grid = css({
@@ -430,3 +468,6 @@
     </div>
   </div>
 </section>
+
+<!-- Framework 2 §3.6: Focus pull/blur overlay for exit transition -->
+<FilmToStoriesFocusOverlay previewRect={focusOverlayRect} />

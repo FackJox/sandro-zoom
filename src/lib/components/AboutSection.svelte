@@ -69,9 +69,9 @@
     color: 'text',
     overflow: 'hidden',
     opacity: 0,
-    visibility: 'hidden',
-    // Zoom-out transition: starts full, contracts to center on exit
-    clipPath: 'circle(150% at 50% 50%)'
+    visibility: 'hidden'
+    // DESIGN SPEC: Zoom-out uses mask-image with torus pattern (not clipPath)
+    // mask-image is applied dynamically via zoomOutTransition.ts
   });
 
   const headerRow = css({

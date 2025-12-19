@@ -13,9 +13,11 @@
   let root: HTMLElement;
   let successBlock: HTMLElement;
   let failBlock: HTMLElement;
+  let bgVideo: HTMLVideoElement;
   let focusRing: HTMLDivElement | null = null;
   let activeIndex = 0;
   let sectionCleanup: (() => void) | null = null;
+  let videoPanTween: gsap.core.Tween | null = null;
   let wasActive = false;
 
   const sectionClass = css({
@@ -24,9 +26,9 @@
     overflow: 'hidden',
     color: 'text',
     opacity: 0,
-    visibility: 'hidden',
-    // Zoom-out transition: starts full, contracts to center on exit
-    clipPath: 'circle(150% at 50% 50%)'
+    visibility: 'hidden'
+    // DESIGN SPEC: Zoom-out uses mask-image with torus pattern (not clipPath)
+    // mask-image is applied dynamically via zoomOutTransition.ts
   });
   const bgClass = css({
     position: 'absolute',
@@ -117,6 +119,8 @@ function moveRing(target: HTMLElement | null, immediate = false) {
     sectionCleanup = null;
     timeline?.kill();
     timeline = null;
+    videoPanTween?.kill();
+    videoPanTween = null;
     timelineDisposer?.();
     timelineDisposer = null;
   }
@@ -134,6 +138,18 @@ function moveRing(target: HTMLElement | null, immediate = false) {
       gsap.set(successBlock, { clipPath: 'circle(140% at 50% 50%)', opacity: 1 });
       gsap.set(failBlock, { clipPath: 'circle(0% at 50% 50%)', opacity: 0 });
       moveRing(successBlock, true);
+
+      // Add slow pan drift to background video (basecamp continues slow pan per design spec)
+      if (bgVideo) {
+        videoPanTween = gsap.to(bgVideo, {
+          scale: 1.08,
+          xPercent: 3,
+          duration: 30,
+          ease: 'none',
+          repeat: -1,
+          yoyo: true
+        });
+      }
 
       // Create paused timeline - controlled by master scroll controller
       const tl = gsap.timeline({
@@ -216,7 +232,7 @@ function moveRing(target: HTMLElement | null, immediate = false) {
 </script>
 
 <section bind:this={root} class={sectionClass} id="photo-stats">
-  <video class={bgClass} autoplay muted loop playsinline>
+  <video bind:this={bgVideo} class={bgClass} autoplay muted loop playsinline>
     {#each getVideoSources('/videos/documentary-sierra.mp4') as source}
       <source src={source.src} type={source.type} />
     {/each}
@@ -225,7 +241,7 @@ function moveRing(target: HTMLElement | null, immediate = false) {
   <div class={overlayClass}></div>
 
   <div class={contentClass}>
-    <SectionLabel prefix="Photo" title="Altitude Log" />
+    <SectionLabel prefix="Photo" title="Successful Climbs" />
 
     <div class={cardClass}>
       <div class={panelClass} bind:this={successBlock}>

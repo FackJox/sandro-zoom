@@ -26,7 +26,10 @@ export function attachFilmStoriesExitPortal(options: ExitOptions): () => void {
     return () => {};
   }
 
+  // Exit portal spans 85-100% of timeline (15% duration)
+  // All positions must stay within this range
   const exitStart = 0.85;
+  const exitDuration = 0.15; // 15% of timeline
 
   // Create concentric ring overlays
   const rings = Array.from({ length: 2 }, (_, idx) => {
@@ -93,12 +96,13 @@ export function attachFilmStoriesExitPortal(options: ExitOptions): () => void {
   // Get last story card (Afghanistan) for initial focus
   const lastCard = storyCards[storyCards.length - 1];
 
-  // Phase 1: Zoom out from Afghanistan (0.85-0.90)
+  // Phase 1: Zoom out from Afghanistan (85-87.5% of timeline)
+  const phase1Duration = exitDuration * 0.167; // ~2.5%
   timeline.to(
     lastCard,
     {
       scale: 0.8,
-      duration: 0.15,
+      duration: phase1Duration,
       ease: brandEase
     },
     exitStart
@@ -111,25 +115,26 @@ export function attachFilmStoriesExitPortal(options: ExitOptions): () => void {
       ring,
       {
         opacity: 0.4,
-        duration: 0.12,
+        duration: phase1Duration * 0.5,
         ease: brandEase
       },
-      exitStart + 0.05 + idx * 0.02
+      exitStart + phase1Duration * 0.2 + idx * phase1Duration * 0.1
     );
     timeline.to(
       ring,
       {
         opacity: 0,
         scale: 1.5 + idx * 0.3,
-        duration: 0.25,
+        duration: phase1Duration,
         ease: 'power2.out'
       },
-      exitStart + 0.12 + idx * 0.03
+      exitStart + phase1Duration * 0.5 + idx * phase1Duration * 0.1
     );
   });
 
-  // Phase 2: Stories collapse to vertical strip (0.90-0.95)
-  const stripStart = exitStart + 0.25;
+  // Phase 2: Stories collapse to vertical strip (87.5-92.5% of timeline)
+  const stripStart = exitStart + exitDuration * 0.167; // ~87.5%
+  const phase2Duration = exitDuration * 0.333; // ~5%
   storyCards.forEach((card, index) => {
     timeline.to(
       card,
@@ -138,7 +143,7 @@ export function attachFilmStoriesExitPortal(options: ExitOptions): () => void {
         xPercent: -180,
         yPercent: (index - 1) * 80,
         opacity: 0.6,
-        duration: 0.3,
+        duration: phase2Duration,
         ease: 'power2.inOut'
       },
       stripStart
@@ -150,13 +155,14 @@ export function attachFilmStoriesExitPortal(options: ExitOptions): () => void {
     verticalStrip,
     {
       opacity: 1,
-      duration: 0.25
+      duration: phase2Duration * 0.8
     },
-    stripStart + 0.1
+    stripStart + phase2Duration * 0.2
   );
 
-  // Phase 3: Focus ring moves to stats (0.95-0.98)
-  const focusStart = stripStart + 0.25;
+  // Phase 3: Focus ring moves to stats (92.5-97.5% of timeline)
+  const focusStart = stripStart + phase2Duration; // ~92.5%
+  const phase3Duration = exitDuration * 0.333; // ~5%
 
   // Position focus ring over vertical strip initially
   timeline.call(() => {
@@ -174,7 +180,7 @@ export function attachFilmStoriesExitPortal(options: ExitOptions): () => void {
     statsPreview,
     {
       opacity: 1,
-      duration: 0.25
+      duration: phase3Duration * 0.5
     },
     focusStart
   );
@@ -195,21 +201,22 @@ export function attachFilmStoriesExitPortal(options: ExitOptions): () => void {
       },
       width: '14rem',
       height: '10rem',
-      duration: 0.4,
+      duration: phase3Duration * 0.8,
       ease: 'power2.inOut'
     },
-    focusStart + 0.15
+    focusStart + phase3Duration * 0.2
   );
 
-  // Phase 4: Stats zoom in (0.98-1.0)
-  const zoomStart = focusStart + 0.45;
+  // Phase 4: Stats zoom in (97.5-100% of timeline)
+  const zoomStart = focusStart + phase3Duration; // ~97.5%
+  const phase4Duration = exitDuration * 0.167; // ~2.5%
 
   // Scale up stats preview
   timeline.to(
     statsPreview,
     {
       scale: 1.5,
-      duration: 0.25,
+      duration: phase4Duration,
       ease: 'power2.in'
     },
     zoomStart
@@ -220,16 +227,16 @@ export function attachFilmStoriesExitPortal(options: ExitOptions): () => void {
     [focusRing, verticalStrip],
     {
       opacity: 0,
-      duration: 0.2
+      duration: phase4Duration * 0.8
     },
     zoomStart
   );
 
-  // Fire portal ready event
+  // Fire portal ready event at end of exit portal
   timeline.call(() => {
     const statsRect = statsPreview.getBoundingClientRect();
     onPortalReady?.({ focusRect: statsRect });
-  }, undefined, zoomStart + 0.2);
+  }, undefined, zoomStart + phase4Duration * 0.8);
 
   // Cleanup function
   return () => {
