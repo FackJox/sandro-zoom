@@ -8,12 +8,7 @@ import {
   attachLensToSection
 } from '$lib/motion/lensTimeline';
 import {
-  HERO_METADATA,
-  LOGOS_METADATA,
-  markMetadataDetached,
-  popMetadataState,
-  pushMetadataState,
-  setCurrentMetadata
+  markMetadataDetached
 } from '$lib/motion/metadata';
 
 interface HeroTimelineOptions {
@@ -22,9 +17,9 @@ interface HeroTimelineOptions {
   slab: HTMLElement;
   lens: HTMLElement;
   lensMedia: HTMLVideoElement | null;
-  metadata: HTMLElement;
+  logoRail: HTMLElement;
+  netflixLogo: HTMLElement | null;
   halo: HTMLElement;
-  strips: Array<HTMLVideoElement | null>;
   copyLines: Array<HTMLElement | null>;
   orchestrator?: ScrollOrchestrator;
 }
@@ -33,8 +28,6 @@ export function initHeroTimelines(options: HeroTimelineOptions) {
   if (typeof window === 'undefined') {
     return;
   }
-
-  setCurrentMetadata(HERO_METADATA);
 
   const prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
   const animations: gsap.core.Animation[] = [];
@@ -47,10 +40,8 @@ export function initHeroTimelines(options: HeroTimelineOptions) {
     Boolean(options.media),
     'hasLens',
     Boolean(options.lens),
-    'hasMetadata',
-    Boolean(options.metadata),
-    'stripCount',
-    options.strips.filter(Boolean).length,
+    'hasLogoRail',
+    Boolean(options.logoRail),
     'copyCount',
     options.copyLines.filter(Boolean).length
   );
@@ -58,42 +49,35 @@ export function initHeroTimelines(options: HeroTimelineOptions) {
   if (!options.root) missingTargets.push('root');
   if (!options.media) missingTargets.push('media');
   if (!options.lens) missingTargets.push('lens');
-  if (!options.metadata) missingTargets.push('metadata');
+  if (!options.logoRail) missingTargets.push('logoRail');
   if (missingTargets.length) {
     console.warn('[hero-motion] missing targets -> skipping', missingTargets.join(', '));
     return () => {};
   }
 
   const heroSegment = registerLensSegment('hero', (tl, proxy, emit) => {
+    // NOTE: opacity is NOT tweened here - it's controlled by morphTl at 95%
+    // This prevents the Svelte reactive binding from showing lens early
     tl.to(proxy, {
       xPercent: -12,
       yPercent: -38,
       scale: 0.74,
-      opacity: 0.68,
+      // opacity removed - controlled directly by GSAP in morphTl
       duration: 1,
       onUpdate: emit
     });
   });
 
-  const sliceElements = options.strips.filter(Boolean);
-
   const copyTargets = options.copyLines.filter((node): node is HTMLElement => Boolean(node));
 
-  let logosMetadataActive = false;
-
-  const restoreHeroMetadata = () => {
-    if (logosMetadataActive) {
-      popMetadataState('logos');
-      logosMetadataActive = false;
-    } else {
-      setCurrentMetadata(HERO_METADATA);
-    }
+  const restoreHeroState = () => {
     markMetadataDetached(false);
     markLensElementDetached(false);
     attachLensToSection('hero');
-    gsap.set(options.metadata, {
-      clearProps: 'transform,backgroundColor,color,borderColor,letterSpacing,paddingTop,paddingBottom,opacity'
-    });
+    // Reset lens opacity back to hidden
+    gsap.set(options.lens, { opacity: 0 });
+    // Reset logo rail opacity
+    gsap.set(options.logoRail, { opacity: 1 });
   };
 
   let introTl: gsap.core.Timeline | null = null;
@@ -108,8 +92,9 @@ export function initHeroTimelines(options: HeroTimelineOptions) {
         { clipPath: 'inset(0% 0 0 0)', duration: 0.6 },
         '-=0.45'
       )
-      .from(options.lens, { scale: 0.8, opacity: 0, duration: 0.4 }, '-=0.35')
-      .from(options.metadata, { y: 20, opacity: 0, duration: 0.4 }, '-=0.25');
+      // Note: Lens badge stays hidden (opacity: 0) until hero exit portal
+      // It will be revealed when hero shrinks into it at ~92% scroll
+      .from(options.logoRail, { y: 20, opacity: 0, duration: 0.4 }, '-=0.25');
 
     // Set lens media to initial zoomed-in state for later zoom-out during portal
     if (options.lensMedia) {
@@ -155,7 +140,7 @@ export function initHeroTimelines(options: HeroTimelineOptions) {
     setLensSegmentProgress(heroSegment, progress);
 
     if (progress <= 0.05) {
-      restoreHeroMetadata();
+      restoreHeroState();
     }
 
     // Handle enter/leave callbacks
@@ -164,7 +149,7 @@ export function initHeroTimelines(options: HeroTimelineOptions) {
     } else if (!isActive && wasActive && progress >= 0.95) {
       console.debug('[hero-morph] onLeave');
     } else if (!isActive && wasActive && progress <= 0.05) {
-      restoreHeroMetadata();
+      restoreHeroState();
       console.debug('[hero-morph] onLeaveBack');
     }
     wasActive = isActive;
@@ -186,61 +171,99 @@ export function initHeroTimelines(options: HeroTimelineOptions) {
   // Set initial clip-path for circular contraction animation
   gsap.set(options.root, { clipPath: 'circle(100% at 50% 50%)' });
 
+  // DEBUG: Log initial lens state
+  console.log('[hero-morph] INIT lens element:', options.lens);
+  console.log('[hero-morph] INIT lens opacity:', window.getComputedStyle(options.lens).opacity);
+  gsap.set(options.lens, { opacity: 0 }); // Ensure lens starts hidden
+  console.log('[hero-morph] INIT lens opacity after set:', window.getComputedStyle(options.lens).opacity);
+
+  // Track if we've transitioned metadata from logos to credentials
+  // (uses metadataTransitionedToCredentials declared earlier)
+
+  // Helper to get lens badge center position for portal shrink target
+  const getLensCenter = () => {
+    const lensRect = options.lens.getBoundingClientRect();
+    const cx = (lensRect.left + lensRect.width / 2) / window.innerWidth * 100;
+    const cy = (lensRect.top + lensRect.height / 2) / window.innerHeight * 100;
+    const radius = Math.max(lensRect.width, lensRect.height) / 2;
+    return { cx, cy, radius };
+  };
+
+  // ============================================================
+  // PHASE 1: 0-85% - Logo rail visible, idle state
+  // ============================================================
+  morphTl.to({}, { duration: 0.85 }); // Hold for first 85%
+
+  // ============================================================
+  // PHASE 2: 85-100% - Dual Portal Exit
+  // Hero shrinks into lens badge position, lens fades in
+  // ============================================================
+
+  // 85-90%: Begin hero contraction and darkening
   morphTl
-    .to({}, { duration: 0.25 })
-    .to(
-      options.root,
-      {
-        scale: 0.9,
-        filter: 'brightness(0.72)',
-        clipPath: 'circle(35% at 50% 50%)',  // Contract simultaneously with scale/darken
-        transformOrigin: 'center center'
-      },
-      '-=0.02'
-    )
-    // Halo expands outward from lens during portal transition, then fades
-    .to(options.halo, { opacity: 0.6, scale: 1.8, duration: 0.3 }, '<')
-    .to(options.halo, { opacity: 0.9, scale: 2.4, duration: 0.25 }, '>')
-    .to(options.lensMedia, { scale: 1.0, duration: 0.5 }, '<-0.3')
-    .to(
-      options.metadata,
-      {
-        yPercent: -240,
-        backgroundColor: 'var(--colors-blackPearl)',
-        color: 'var(--colors-eggToast)',
-        borderColor: 'var(--colors-eggToast)',
-        letterSpacing: '0.18em'
-      },
-      '>-0.05'
-    )
-    .to(
-      options.metadata,
-      {
-        paddingTop: '0.75rem',
-        paddingBottom: '0.5rem'
-      },
-      0
-    )
-    .to(options.metadata, { opacity: 0, duration: 0.2 }, '>-0.05')
+    .to(options.root, {
+      scale: 0.92,
+      filter: 'brightness(0.75)',
+      duration: 0.05,
+      ease: brandEase
+    }, 0.85);
+
+  // 90-98%: Hero shrinks via clip-path toward lens position
+  morphTl.to(options.root, {
+    clipPath: () => {
+      const { cx, cy, radius } = getLensCenter();
+      return `circle(${radius}px at ${cx}% ${cy}%)`;
+    },
+    scale: 0.85,
+    filter: 'brightness(0.6)',
+    duration: 0.08,
+    ease: brandEase
+  }, 0.90);
+
+  // 95-98%: Lens badge appears as hero shrinks into it (tighter timing)
+  morphTl
     .call(() => {
-      if (!logosMetadataActive) {
-        pushMetadataState({ id: 'logos', text: LOGOS_METADATA });
-        logosMetadataActive = true;
-      } else {
-        setCurrentMetadata(LOGOS_METADATA);
+      console.log('[hero-morph] 0.95: LENS REVEAL START');
+      console.log('[hero-morph] 0.95: lens opacity before:', window.getComputedStyle(options.lens).opacity);
+    }, [], 0.95)
+    .to(options.lens, {
+      opacity: 1,
+      duration: 0.03,
+      ease: brandEase,
+      onComplete: () => {
+        console.log('[hero-morph] 0.98: LENS REVEAL COMPLETE, opacity:', window.getComputedStyle(options.lens).opacity);
       }
-      markMetadataDetached(true);
-      markLensElementDetached(true);
-      attachLensToSection('logos');
-    })
-    .to(options.metadata, { opacity: 1, duration: 0.2 }, '>-0.05')
-    .to(options.halo, { opacity: 0, duration: 0.2 }, '>-0.1')
-    // Final clip-path shrink to nothing
+    }, 0.95);
+
+  // Lens media zooms out to show more content
+  if (options.lensMedia) {
+    morphTl.to(options.lensMedia, { scale: 1.0, duration: 0.03 }, 0.95);
+  }
+
+  // 96-100%: Final hero clip to nothing, hand off to logos section
+  morphTl
+    .call(() => {
+      console.log('[hero-morph] 0.96: HERO CLIP TO 0% START');
+      console.log('[hero-morph] 0.96: root clipPath:', window.getComputedStyle(options.root).clipPath);
+    }, [], 0.96)
     .to(options.root, {
       clipPath: 'circle(0% at 50% 50%)',
       opacity: 0,
-      duration: 0.25
-    }, '>');
+      duration: 0.04,
+      onComplete: () => {
+        console.log('[hero-morph] 1.00: HERO DISAPPEARED');
+        console.log('[hero-morph] 1.00: root opacity:', window.getComputedStyle(options.root).opacity);
+        console.log('[hero-morph] 1.00: root clipPath:', window.getComputedStyle(options.root).clipPath);
+      }
+    }, 0.96)
+    .call(() => {
+      console.log('[hero-morph] 0.98: HANDOFF TO LOGOS');
+      // Hand off to logos section
+      markMetadataDetached(true);
+      markLensElementDetached(true);
+      attachLensToSection('logos');
+      console.log('[hero-morph] 0.98: metadataDetached=true, lensDetached=true, lensAttachment=logos');
+    }, [], 0.98);
 
   registerAnimation('hero:morph', morphTl);
 
@@ -262,18 +285,6 @@ export function initHeroTimelines(options: HeroTimelineOptions) {
         Object.assign(lensDefaultState, { idleOffset: -6 * progress });
       }
     }, 0);
-
-    // Circular strip masks parallax - each strip drifts at different speeds during progress
-    sliceElements.forEach((slice, index) => {
-      const depthMultiplier = 1 + index * 0.5;
-      morphTl.to(slice, {
-        yPercent: -15 * depthMultiplier,
-        xPercent: (index % 2 ? 8 : -6) * depthMultiplier,
-        rotation: index % 2 ? 12 : -10,
-        ease: 'none',
-        duration: 1
-      }, 0);
-    });
 
     // Media drift - standalone continuous animation (not scroll-driven)
     const mediaDrift = gsap.to(options.media, {
@@ -298,9 +309,5 @@ export function initHeroTimelines(options: HeroTimelineOptions) {
     heroTimelineDisposers.length = 0;
     triggers.forEach((trigger) => trigger.kill());
     animations.forEach((animation) => animation.kill());
-    if (logosMetadataActive) {
-      popMetadataState('logos');
-      logosMetadataActive = false;
-    }
   };
 }

@@ -7,6 +7,8 @@
   import { attachLensToSection } from '$lib/motion/lensTimeline';
   import { getVideoSources } from '$lib/utils/video';
   import { serviceCredits, servicesHeading, servicesCta } from '$lib/data/services';
+  import DebugOverlay from '$lib/components/DebugOverlay.svelte';
+  import { debugMode, DEBUG_COLORS } from '$lib/stores/debug';
 
   /**
    * ServicesSection - "Credits on Black"
@@ -432,6 +434,9 @@
 </script>
 
 <section bind:this={root} class={sectionClass} id="services">
+  {#if $debugMode}
+    <DebugOverlay label="services" color={DEBUG_COLORS.services.color} index={DEBUG_COLORS.services.index} />
+  {/if}
   <!-- Video intro layer (fades out on scroll) -->
   <video
     class={videoClass}

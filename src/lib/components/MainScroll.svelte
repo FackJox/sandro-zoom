@@ -15,15 +15,19 @@
 
   // Track lens attachment for persistent layer visibility
   // Hero section has its own LensBadge, so hide persistent one when hero owns it
+  // Logos section uses portal animation for lens transition, so hide persistent one there too
   let currentAttachment: string | null = null;
   let currentSection: string | null = null;
   let showPersistentLens = false;
 
-  // Derive lens owner: prefer explicit attachment, fallback to current section
-  // This prevents lens from disappearing when sections don't call attachLensToSection reliably
+  // Only show persistent lens when we're past the hero→logos portal transition
+  // Hero has its own lens, Logos uses portal animation - persistent lens shows from Film onwards
   $: {
-    const derivedOwner = currentAttachment ?? (currentSection !== 'hero' ? currentSection : null);
-    showPersistentLens = derivedOwner !== null && derivedOwner !== 'hero';
+    // Hide during hero (has its own lens) and logos (uses portal animation)
+    const isAfterPortalTransition = currentSection !== null &&
+      currentSection !== 'hero' &&
+      currentSection !== 'logos';
+    showPersistentLens = isAfterPortalTransition;
   }
 
   const unsubLensAttachment = lensAttachment.subscribe((value) => {

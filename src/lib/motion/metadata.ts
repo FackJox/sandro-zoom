@@ -10,11 +10,12 @@ export interface MetadataState {
   text: string;
 }
 
-const textStore = writable(HERO_METADATA);
+// Start with logos (social proof) - scan line wipe transitions to credentials
+const textStore = writable(LOGOS_METADATA);
 const nodeStore = writable<HTMLElement | null>(null);
 const detachedStore = writable(false);
 const homeStore = writable<HTMLElement | null>(null);
-const metadataStack: MetadataState[] = [{ id: 'hero', text: HERO_METADATA }];
+const metadataStack: MetadataState[] = [{ id: 'hero-logos', text: LOGOS_METADATA }];
 const stackStore = writable<MetadataState[]>([...metadataStack]);
 
 export const metadataText = textStore;

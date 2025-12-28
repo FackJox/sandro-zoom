@@ -4,8 +4,10 @@
   import { heading, body } from '$styled-system/recipes';
   import { layout } from '$design/system';
   import { SCROLL_ORCHESTRATOR_CONTEXT_KEY, type ScrollOrchestrator, gsap, masterScrollController } from '$lib/motion';
-  import SectionLabel from './SectionLabel.svelte';
-  import StepIndicator from './StepIndicator.svelte';
+  import SectionLabel from '$lib/components/SectionLabel.svelte';
+  import StepIndicator from '$lib/components/StepIndicator.svelte';
+  import DebugOverlay from '$lib/components/DebugOverlay.svelte';
+  import { debugMode, DEBUG_COLORS } from '$lib/stores/debug';
   import { getVideoSources } from '$lib/utils/video';
   import { aboutBeats, aboutSteps, valuesStaggerLines, servicesGhostLabels, type Beat } from '$lib/data/about-beats';
   import {
@@ -335,6 +337,9 @@
 </script>
 
 <section bind:this={root} class={sectionClass} id="about">
+  {#if $debugMode}
+    <DebugOverlay label="about" color={DEBUG_COLORS.about.color} index={DEBUG_COLORS.about.index} />
+  {/if}
   <!-- Header row -->
   <header class={headerRow}>
     <SectionLabel prefix="About me" title={content[activeIndex]?.title ?? 'Story'} />

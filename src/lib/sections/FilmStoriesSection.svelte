@@ -4,8 +4,10 @@
   import { layout } from '$design/system';
   import { gsap, brandEase, SCROLL_ORCHESTRATOR_CONTEXT_KEY, type ScrollOrchestrator, masterScrollController } from '$lib/motion';
   import { attachLensToSection } from '$lib/motion/lensTimeline';
-  import SectionLabel from './SectionLabel.svelte';
-  import StepIndicator from './StepIndicator.svelte';
+  import SectionLabel from '$lib/components/SectionLabel.svelte';
+  import StepIndicator from '$lib/components/StepIndicator.svelte';
+  import DebugOverlay from '$lib/components/DebugOverlay.svelte';
+  import { debugMode, DEBUG_COLORS } from '$lib/stores/debug';
   import { getVideoSources } from '$lib/utils/video';
   import { filmStories } from '$lib/data/film-stories';
   import { attachFilmStoriesExitPortal } from '$lib/sections/FilmStoriesExit';
@@ -493,6 +495,9 @@
 </script>
 
 <section bind:this={root} class={sectionClass} id="film-stories">
+  {#if $debugMode}
+    <DebugOverlay label="filmStories" color={DEBUG_COLORS.filmStories.color} index={DEBUG_COLORS.filmStories.index} />
+  {/if}
   <SectionLabel prefix="Film" title="Field Stories" />
 
   <div class={contentGridClass} bind:this={contentGrid}>

@@ -5,9 +5,11 @@
   import { layout } from '$design/system';
   import { gsap, brandEase, SCROLL_ORCHESTRATOR_CONTEXT_KEY, type ScrollOrchestrator, masterScrollController } from '$lib/motion';
   import { attachLensToSection } from '$lib/motion/lensTimeline';
-  import SectionLabel from './SectionLabel.svelte';
+  import SectionLabel from '$lib/components/SectionLabel.svelte';
   import { getVideoSources } from '$lib/utils/video';
-  import StepIndicator from './StepIndicator.svelte';
+  import StepIndicator from '$lib/components/StepIndicator.svelte';
+  import DebugOverlay from '$lib/components/DebugOverlay.svelte';
+  import { debugMode, DEBUG_COLORS } from '$lib/stores/debug';
   import { successfulClimbs, unsuccessfulClimbs, formatStatLine } from '$lib/data/climbing-stats';
 
   let root: HTMLElement;
@@ -232,6 +234,9 @@ function moveRing(target: HTMLElement | null, immediate = false) {
 </script>
 
 <section bind:this={root} class={sectionClass} id="photo-stats">
+  {#if $debugMode}
+    <DebugOverlay label="photoStats" color={DEBUG_COLORS.photoStats.color} index={DEBUG_COLORS.photoStats.index} />
+  {/if}
   <video bind:this={bgVideo} class={bgClass} autoplay muted loop playsinline>
     {#each getVideoSources('/videos/documentary-sierra.mp4') as source}
       <source src={source.src} type={source.type} />

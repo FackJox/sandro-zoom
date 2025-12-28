@@ -3,8 +3,6 @@ import { registerLensSegment, setLensSegmentProgress, attachLensToSection } from
 
 interface LogosTimelineOptions {
   root: HTMLElement;
-  rail: HTMLElement;
-  metadata?: HTMLElement | null;
   orchestrator?: ScrollOrchestrator;
 }
 
@@ -13,27 +11,18 @@ export function initLogosTimelines(options: LogosTimelineOptions) {
     return;
   }
 
-  const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
   const animations: gsap.core.Animation[] = [];
   const timelineDisposers: Array<() => void> = [];
   console.debug(
     '[logos-motion] init',
     'hasRoot',
     Boolean(options.root),
-    'hasRail',
-    Boolean(options.rail),
-    'hasMetadata',
-    Boolean(options.metadata),
     'orchestrator',
     Boolean(options.orchestrator)
   );
 
-  const missingTargets: string[] = [];
-  if (!options.root) missingTargets.push('root');
-  if (!options.rail) missingTargets.push('rail');
-  if (!options.metadata) missingTargets.push('metadata');
-  if (missingTargets.length) {
-    console.warn('[logos-motion] missing targets -> skipping', missingTargets.join(', '));
+  if (!options.root) {
+    console.warn('[logos-motion] missing root -> skipping');
     return () => {};
   }
 
@@ -63,37 +52,8 @@ export function initLogosTimelines(options: LogosTimelineOptions) {
     paused: true
   });
 
-  // Add all animations to the master timeline
+  // Minimal timeline - just holds position for lens segment
   masterTimeline.to({}, { duration: 1 });
-
-  // Rail drift animation - integrated into master timeline (skip if reduced motion)
-  if (!reduceMotion) {
-    masterTimeline.to(options.rail, {
-      xPercent: -25,
-      ease: 'none',
-      duration: 1
-    }, 0);
-  }
-
-  // Metadata animation - integrated into master timeline
-  if (options.metadata) {
-    masterTimeline
-      .set(options.metadata, {
-        width: '100%',
-        left: '0',
-        position: 'relative'
-      }, 0)
-      .to(
-        options.metadata,
-        {
-          yPercent: -10,
-          backgroundColor: 'var(--colors-blackPearl)',
-          borderColor: 'var(--colors-eggToast)',
-          duration: 0.6
-        },
-        0
-      );
-  }
 
   registerAnimation('logos:master', masterTimeline);
 
@@ -105,42 +65,30 @@ export function initLogosTimelines(options: LogosTimelineOptions) {
     masterTimeline.progress(progress);
     setLensSegmentProgress(logosSegment, progress);
 
+    // DEBUG: Log all progress updates
+    console.log('[logos-motion] progress:', progress.toFixed(3), 'isActive:', isActive, 'wasActive:', wasActive);
+
     // Handle lens attachment based on active state
     if (isActive && !wasActive) {
-      console.debug('[logos-motion] enter');
+      console.log('[logos-motion] ENTER - attaching lens to logos');
       attachLensToSection('logos');
     } else if (!isActive && wasActive && progress >= 0.95) {
-      console.debug('[logos-motion] leave → bigFilm');
+      console.log('[logos-motion] LEAVE → bigFilm at progress:', progress.toFixed(3));
       attachLensToSection('film');
     } else if (!isActive && wasActive && progress <= 0.05) {
-      console.debug('[logos-motion] leaveBack → hero');
+      console.log('[logos-motion] LEAVE BACK → hero at progress:', progress.toFixed(3));
       attachLensToSection('hero');
     }
     wasActive = isActive;
-
-    // Only log periodically to avoid spam
-    if (Math.floor(progress * 20) !== Math.floor((progress - 0.05) * 20)) {
-      console.debug(
-        '[logos-morph] update',
-        'progress',
-        Number(progress.toFixed(3)),
-        'isActive',
-        isActive
-      );
-    }
   });
 
-  // NOTE: Section element is registered in LogosSection.svelte onMount for immediate visibility control
-  // Here we just update the timeline reference for the already-registered section
+  // Register section with master controller
   masterScrollController.registerSection('logos', options.root, masterTimeline);
 
   console.debug('[logos-motion] timeline created (paused, master-controlled)');
 
   return () => {
-    // Clean up master scroll subscriptions
-    // NOTE: Section element cleanup is handled by LogosSection.svelte onDestroy
     unsubscribeMaster();
-
     timelineDisposers.forEach((dispose) => dispose());
     timelineDisposers.length = 0;
     animations.forEach((animation) => animation.kill());

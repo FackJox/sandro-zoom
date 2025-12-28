@@ -19,7 +19,7 @@ export const lensDefaultState: LensState = {
   xPercent: 0,
   yPercent: 0,
   scale: 1,
-  opacity: 1,
+  opacity: 0,  // Hidden initially - revealed when hero shrinks into it
   idleOffset: 0
 };
 

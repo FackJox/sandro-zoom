@@ -1,17 +1,20 @@
 <script lang="ts">
   import HeroSection from '$lib/sections/HeroSection.svelte';
   import LogosSection from '$lib/sections/LogosSection.svelte';
-  import BigFilmSection from '$lib/components/BigFilmSection.svelte';
-  import FilmStoriesSection from '$lib/components/FilmStoriesSection.svelte';
-  import PhotoStatsSection from '$lib/components/PhotoStatsSection.svelte';
-  import AboutSection from '$lib/components/AboutSection.svelte';
-  import ServicesSection from '$lib/components/ServicesSection.svelte';
-  import FinalContactSection from '$lib/components/FinalContactSection.svelte';
+  import BigFilmSection from '$lib/sections/BigFilmSection.svelte';
+  import FilmStoriesSection from '$lib/sections/FilmStoriesSection.svelte';
+  import PhotoStatsSection from '$lib/sections/PhotoStatsSection.svelte';
+  import AboutSection from '$lib/sections/AboutSection.svelte';
+  import ServicesSection from '$lib/sections/ServicesSection.svelte';
+  import FinalContactSection from '$lib/sections/FinalContactSection.svelte';
   import MainScroll from '$lib/components/MainScroll.svelte';
   import PortalOverlay from '$lib/components/PortalOverlay.svelte';
   import GridFlipOverlay from '$lib/components/GridFlipOverlay.svelte';
   import CameraZoomOutOverlay from '$lib/components/CameraZoomOutOverlay.svelte';
   import StatsToAboutPortal from '$lib/components/StatsToAboutPortal.svelte';
+
+  // Hero → Logos: Netflix logo triggers portal expand
+  let heroPortalTrigger: HTMLElement | null = null;
 
   // Logos → BigFilm: Netflix expand (kept)
   let filmPortalReady = false;
@@ -38,8 +41,8 @@
 </script>
 
 <MainScroll>
-  <HeroSection />
-  <LogosSection on:portal:film-ready={handleFilmPortal} />
+  <HeroSection bind:portalTriggerRef={heroPortalTrigger} />
+  <LogosSection portalTriggerEl={heroPortalTrigger} on:portal:film-ready={handleFilmPortal} />
 
   <!-- Zoom-out chain: sections transition via contracting circles -->
   <BigFilmSection filmPortalReady={filmPortalReady} />

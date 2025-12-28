@@ -1,9 +1,12 @@
 <script lang="ts">
   import { getContext, onDestroy, onMount, tick } from 'svelte';
-  import { css } from '$styled-system/css';
+  import { css, cx } from '$styled-system/css';
+  import { body } from '$styled-system/recipes';
   import { layout } from '$design/system';
   import LensBadge from '$lib/components/LensBadge.svelte';
-  import MetadataStrip from '$lib/components/MetadataStrip.svelte';
+  import DebugOverlay from '$lib/components/DebugOverlay.svelte';
+  import { debugMode, DEBUG_COLORS } from '$lib/stores/debug';
+  import { clientLogos } from '$lib/data/logos';
   import {
     lensState as lensStore,
     lensDefaultState,
@@ -13,7 +16,6 @@
     attachLensToSection
   } from '$lib/motion/lensTimeline';
   import {
-    metadataText,
     setMetadataElement,
     markMetadataDetached,
     setMetadataHome
@@ -35,14 +37,16 @@
   let lensHome: HTMLDivElement;
   let lensMotion: HTMLDivElement;
   let lensMedia: HTMLVideoElement | null = null;
-  let metadataDock: HTMLDivElement | null = null;
-  let metadata: HTMLDivElement;
+  let logoRailEl: HTMLDivElement;
+  let netflixLogoEl: HTMLElement | null = null;
+
+  // Export Netflix logo ref for portal trigger
+  export { netflixLogoEl as portalTriggerRef };
   let titleEl: HTMLElement;
   let subtitleEl: HTMLElement;
   let bodyEl: HTMLElement;
   let footerEl: HTMLElement;
   let halo: HTMLDivElement;
-  const strips: (HTMLVideoElement | null)[] = [];
 
 let destroy: (() => void) | undefined;
 let reduceMotion = false;
@@ -59,7 +63,8 @@ let disposed = false;
   $: lensY = lensSnapshot.yPercent + lensSnapshot.idleOffset;
   $: hoverScale = lensHover && allowHover && !reduceMotion ? 1.04 : 1;
   $: lensTransform = `translate3d(${lensSnapshot.xPercent}%, ${lensY}%, 0) scale(${lensSnapshot.scale * hoverScale})`;
-  $: lensOpacity = lensSnapshot.opacity;
+  // NOTE: opacity is NOT bound here - GSAP controls it directly in HeroSection.motion.ts
+  // This prevents reactive binding from overriding GSAP's opacity control
 
 onMount(() => {
   reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -70,15 +75,12 @@ onMount(() => {
   markMetadataDetached(false);
   markLensElementDetached(false);
   attachLensToSection('hero');
-  if (metadataDock) {
-    setMetadataHome(metadataDock);
-  }
 
   (async () => {
     await tick();
     if (disposed) return;
-    if (!metadata) {
-      console.warn('[hero] metadata ref missing, skipping motion init');
+    if (!logoRailEl) {
+      console.warn('[hero] logoRail ref missing, skipping motion init');
       return;
     }
     destroy = initHeroTimelines({
@@ -87,9 +89,9 @@ onMount(() => {
       slab,
       lens: lensMotion,
       lensMedia,
-      metadata,
+      logoRail: logoRailEl,
+      netflixLogo: netflixLogoEl,
       halo,
-      strips,
       copyLines: [titleEl, subtitleEl, bodyEl, footerEl],
       orchestrator
     });
@@ -99,22 +101,11 @@ onMount(() => {
 onDestroy(() => {
   disposed = true;
   destroy?.();
-    setMetadataElement(null);
-    markMetadataDetached(false);
     setLensElement(null);
     setLensHome(null);
     markLensElementDetached(false);
     attachLensToSection(null);
-    setMetadataHome(null);
   });
-
-  $: if (metadata) {
-    setMetadataElement(metadata);
-  }
-
-  $: if (metadataDock) {
-    setMetadataHome(metadataDock);
-  }
 
   function handleLensEnter() {
     if (!allowHover || reduceMotion) return;
@@ -173,7 +164,8 @@ onDestroy(() => {
   const lensMotionClass = css({
     willChange: 'transform',
     transition: 'transform 0.22s var(--animation-brandEnter)',
-    display: 'inline-flex'
+    display: 'inline-flex',
+    opacity: 0  // Start hidden - revealed when hero shrinks into it at 95%
   });
 
   const haloClass = css({
@@ -186,32 +178,6 @@ onDestroy(() => {
     pointerEvents: 'none',
     filter: 'blur(1px)'
   });
-
-  const stripField = css({
-    position: 'absolute',
-    inset: 0,
-    pointerEvents: 'none',
-    overflow: 'hidden'
-  });
-
-  const stripVideoClass = css({
-    position: 'absolute',
-    borderRadius: '50%',
-    overflow: 'hidden',
-    opacity: 0.35,
-    mixBlendMode: 'screen',
-    filter: 'grayscale(1)',
-    clipPath: 'circle(60% at 50% 50%)',
-    maskImage: 'radial-gradient(circle at center, transparent 60%, black 70%, black 78%, transparent 88%)',
-    WebkitMaskImage:
-      'radial-gradient(circle at center, transparent 60%, black 70%, black 78%, transparent 88%)'
-  });
-
-  const stripConfigs = [
-    { size: 38, left: 12, top: 2 },
-    { size: 46, left: 0, top: 6 },
-    { size: 54, left: 18, top: 10 }
-  ];
 
   const title = css({
     fontFamily: 'trade',
@@ -228,7 +194,7 @@ onDestroy(() => {
     mt: '0.5rem'
   });
 
-  const body = css({
+  const copyBody = css({
     mt: '1rem',
     fontFamily: 'plex',
     fontSize: { base: '0.95rem', md: '1rem' },
@@ -251,12 +217,45 @@ onDestroy(() => {
     textTransform: 'uppercase'
   });
 
-  const metadataDockClass = css({
-    width: '100%'
+  const logoRailClass = css({
+    position: 'fixed',
+    bottom: { base: '1.5rem', md: '2rem' },
+    left: 0,
+    right: 0,
+    zIndex: 5,
+    display: 'flex',
+    gap: { base: '1.5rem', md: '2.5rem' },
+    py: '1rem',
+    px: { base: layout.safeX.base, md: layout.safeX.md, lg: layout.safeX.lg },
+    whiteSpace: 'nowrap',
+    flexWrap: { base: 'wrap', md: 'nowrap' },
+    justifyContent: 'center',
+    alignItems: 'center'
+  });
+
+  const logoClass = css({
+    textTransform: 'uppercase',
+    letterSpacing: '0.14em',
+    fontSize: { base: '0.75rem', md: '0.85rem' }
+  });
+
+  const logoImgClass = css({
+    height: { base: '1.5rem', md: '2rem' },
+    width: 'auto',
+    objectFit: 'contain',
+    filter: 'brightness(0) invert(1)',
+    opacity: 0.85,
+    transition: 'opacity 0.2s ease',
+    _hover: {
+      opacity: 1
+    }
   });
 </script>
 
 <section class={hero} bind:this={root} id="hero">
+  {#if $debugMode}
+    <DebugOverlay label="hero" color={DEBUG_COLORS.hero.color} index={DEBUG_COLORS.hero.index} />
+  {/if}
   <video class={media} bind:this={bgVideo} autoplay muted playsinline loop>
     {#each heroVideoSources as source}
       <source src={source.src} type={source.type} />
@@ -270,7 +269,7 @@ onDestroy(() => {
         <div
           class={lensMotionClass}
           bind:this={lensMotion}
-          style={`transform:${lensTransform};opacity:${lensOpacity};`}
+          style={`transform:${lensTransform};`}
           role="presentation"
           on:mouseenter={handleLensEnter}
           on:mouseleave={handleLensLeave}
@@ -282,32 +281,33 @@ onDestroy(() => {
 
       <h1 class={title} bind:this={titleEl}>{heroCopy.title}</h1>
       <p class={subtitle} bind:this={subtitleEl}>{heroCopy.subtitle}</p>
-      <p class={body} bind:this={bodyEl}>{heroCopy.body}</p>
+      <p class={copyBody} bind:this={bodyEl}>{heroCopy.body}</p>
       <p class={slabFooter} bind:this={footerEl}>{heroCopy.footer}</p>
     </article>
 
-    <div class={metadataDockClass} bind:this={metadataDock}>
-      <MetadataStrip bind:ref={metadata} text={$metadataText} />
-    </div>
-
     <p class={scrollHint}>{heroCopy.scrollHint}</p>
   </div>
-
-  <div class={stripField} aria-hidden="true">
-    {#each stripConfigs as cfg, idx}
-      <video
-        class={stripVideoClass}
-        bind:this={strips[idx]}
-        autoplay
-        muted
-        playsinline
-        loop
-        style={`width:${cfg.size}vw;height:${cfg.size}vw;left:${cfg.left}%;top:${cfg.top}%;`}
-      >
-        {#each heroVideoSources as source}
-          <source src={source.src} type={source.type} />
-        {/each}
-      </video>
-    {/each}
-  </div>
 </section>
+
+<!-- Logo rail outside hero section so it's not clipped during shrink -->
+<div class={logoRailClass} bind:this={logoRailEl}>
+  {#each clientLogos as logo, idx}
+    {#if logo.isPortalTrigger}
+      <span class={cx(body({}), logoClass)} bind:this={netflixLogoEl}>
+        {#if logo.image}
+          <img src={logo.image} alt={logo.name} class={logoImgClass} />
+        {:else}
+          {logo.name}
+        {/if}
+      </span>
+    {:else}
+      <span class={cx(body({}), logoClass)}>
+        {#if logo.image}
+          <img src={logo.image} alt={logo.name} class={logoImgClass} />
+        {:else}
+          {logo.name}
+        {/if}
+      </span>
+    {/if}
+  {/each}
+</div>

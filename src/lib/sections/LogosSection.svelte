@@ -3,28 +3,27 @@
   import { css, cx } from '$styled-system/css';
   import { body } from '$styled-system/recipes';
   import { layout } from '$design/system';
-  import FrameBorder from '$lib/components/FrameBorder.svelte';
+  import DebugOverlay from '$lib/components/DebugOverlay.svelte';
+  import { debugMode, DEBUG_COLORS } from '$lib/stores/debug';
   import { lensElement, lensHome, lensDetached, lensAttachment } from '$lib/motion/lensTimeline';
-  import { metadataNode, metadataDetached, metadataHome } from '$lib/motion/metadata';
+  import { metadataDetached } from '$lib/motion/metadata';
   import {
     SCROLL_ORCHESTRATOR_CONTEXT_KEY,
     type ScrollOrchestrator,
-    gsap,
     masterScrollController
   } from '$lib/motion';
   import { createPortalContext } from '$lib/motion/portalStore';
-  import { initLogosTimelines } from './LogosSection.motion';
   import { createPortalTimeline } from './FilmEntryPortal';
+  import { initLogosTimelines } from './LogosSection.motion';
   import { getVideoSources } from '$lib/utils/video';
-  import { clientLogos, logosPortalHeading } from '$lib/data/logos';
+  import { logosPortalHeading } from '$lib/data/logos';
   import LensBarrelOverlay from '$lib/components/LensBarrelOverlay.svelte';
 
+  // Portal trigger element passed from parent (HeroSection's Netflix logo)
+  export let portalTriggerEl: HTMLElement | null = null;
+
   let root: HTMLElement;
-  let rail: HTMLElement;
-  let netflixLogo: HTMLElement | null = null;
   let portal: HTMLDivElement;
-  let metadataStrip: HTMLElement | null = null;
-  let metadataHost: HTMLDivElement;
   let lensHost: HTMLDivElement;
   let portalLogoClone: HTMLSpanElement;
   let portalVideo: HTMLVideoElement;
@@ -44,59 +43,12 @@
   let lensOwner: string | null = null;
   let lensNode: HTMLElement | null = null;
   let lensHomeNode: HTMLElement | null = null;
-  let metadataHomeNode: HTMLElement | null = null;
-  let railHome: HTMLElement | null = null;
   const dispatch = createEventDispatcher<{ 'portal:film-ready': { progress: number } }>();
   const orchestrator =
     getContext<ScrollOrchestrator | undefined>(SCROLL_ORCHESTRATOR_CONTEXT_KEY);
   const portalContext = createPortalContext('logos');
 
   $: portalContext.attachElement(portal ?? null);
-
-  function attachMetadata() {
-    if (!metadataStrip) return;
-
-    const target = metadataDetachedState ? metadataHost : metadataHomeNode;
-    if (!target) return;
-
-    if (metadataStrip.parentElement !== target) {
-      target.appendChild(metadataStrip);
-    }
-
-    if (metadataDetachedState) {
-      metadataStrip.style.marginTop = '0';
-      metadataStrip.style.paddingBottom = '0.75rem';
-    } else {
-      metadataStrip.style.marginTop = '';
-      metadataStrip.style.paddingBottom = '';
-      metadataStrip.style.paddingTop = '';
-      metadataStrip.style.backgroundColor = '';
-      metadataStrip.style.color = '';
-      metadataStrip.style.borderColor = '';
-      metadataStrip.style.letterSpacing = '';
-    }
-
-    syncRail();
-  }
-
-  function syncRail() {
-    if (!rail) return;
-    if (!railHome && rail.parentElement) {
-      railHome = rail.parentElement as HTMLElement;
-    }
-
-    if (metadataDetachedState && metadataStrip) {
-      if (rail.parentElement !== metadataStrip) {
-        metadataStrip.appendChild(rail);
-      }
-      rail.style.opacity = '1';
-    } else if (railHome) {
-      if (rail.parentElement !== railHome) {
-        railHome.appendChild(rail);
-      }
-      rail.style.opacity = '0';
-    }
-  }
 
   function attachLens() {
     if (!lensNode) return;
@@ -108,24 +60,39 @@
   }
 
   function initPortalTimeline() {
+    console.log('[logos-svelte] initPortalTimeline called');
+    console.log('[logos-svelte] conditions:', {
+      mounted,
+      metadataDetachedState,
+      hasPortalTimelineCleanup: !!portalTimelineCleanup,
+      hasRoot: !!root,
+      hasPortalTriggerEl: !!portalTriggerEl,
+      hasPortal: !!portal,
+      hasPortalLogoClone: !!portalLogoClone,
+      hasPortalVideo: !!portalVideo
+    });
+
     if (
       !mounted ||
       !metadataDetachedState ||
       portalTimelineCleanup ||
       !root ||
-      !rail ||
-      !netflixLogo ||
+      !portalTriggerEl ||
       !portal ||
       !portalLogoClone ||
       !portalVideo
     ) {
+      console.log('[logos-svelte] initPortalTimeline SKIPPED - missing conditions');
       return;
     }
 
+    console.log('[logos-svelte] initPortalTimeline CREATING portal timeline');
+    console.log('[logos-svelte] portalTriggerEl position:', portalTriggerEl.getBoundingClientRect());
+
     portalTimelineCleanup = createPortalTimeline({
       root,
-      rail,
-      logoEl: netflixLogo,
+      rail: root, // Use root as container since we no longer have rail
+      logoEl: portalTriggerEl,
       portalContext,
       portalLogoClone,
       portalVideo,
@@ -134,53 +101,28 @@
       lensBarrelEl,
       onLensBarrelVisibleChange: (visible) => { lensBarrelVisible = visible; },
       orchestrator,
-      onComplete: () => dispatch('portal:film-ready', { progress: 1 })
+      onComplete: () => {
+        console.log('[logos-svelte] portal:film-ready dispatched');
+        dispatch('portal:film-ready', { progress: 1 });
+      }
     });
-  }
 
-  function initIfReady() {
-    if (!mounted || !metadataStrip || !metadataDetachedState || destroy) return;
-    // NOTE: Section visibility is controlled by masterScrollController.applySectionVisibility()
-    // No manual gsap.set(root, { autoAlpha: 1 }) needed here
-    destroy = initLogosTimelines({
-      root,
-      rail,
-      metadata: metadataStrip,
-      orchestrator
-    });
-    initPortalTimeline();
+    console.log('[logos-svelte] portal timeline created');
   }
-
-  const metadataUnsub = metadataNode.subscribe((node) => {
-    metadataStrip = node;
-    attachMetadata();
-    if (destroy) {
-      destroy();
-      destroy = undefined;
-    }
-    initIfReady();
-  });
 
   const detachedUnsub = metadataDetached.subscribe((value) => {
+    console.log('[logos-svelte] metadataDetached changed:', value);
     metadataDetachedState = value;
     if (!metadataDetachedState) {
-      destroy?.();
-      destroy = undefined;
+      console.log('[logos-svelte] metadataDetached=false, cleaning up portal timeline');
       portalTimelineCleanup?.();
       portalTimelineCleanup = undefined;
       portalContext.reset();
     } else {
+      console.log('[logos-svelte] metadataDetached=true, initiating portal timeline');
       initPortalTimeline();
     }
-    attachMetadata();
     attachLens();
-    syncRail();
-    initIfReady();
-  });
-
-  const metadataHomeUnsub = metadataHome.subscribe((node) => {
-    metadataHomeNode = node;
-    attachMetadata();
   });
 
   const lensElementUnsub = lensElement.subscribe((node) => {
@@ -195,7 +137,6 @@
 
   const lensDetachedUnsub = lensDetached.subscribe((value) => {
     lensReady = value;
-    attachMetadata();
     attachLens();
   });
 
@@ -210,35 +151,29 @@
     if (playPromise !== undefined) {
       playPromise.catch((err) => {
         console.debug('[logos] Portal video autoplay blocked:', err.message);
-        // Video will play when it becomes visible or user interacts
       });
     }
   }
 
   onMount(() => {
     mounted = true;
-
-    // CRITICAL: Register section element IMMEDIATELY for visibility control
-    // This is separate from timeline registration which happens in initIfReady()
-    // GSAP best practice: element registration on mount, timeline registration when ready
     sectionCleanup = masterScrollController.registerSection('logos', root);
     console.debug('[logos] registered section element for visibility control');
 
-    attachMetadata();
+    // Initialize lens segment and timeline
+    destroy = initLogosTimelines({ root, orchestrator });
+
     attachLens();
-    initIfReady();
     portalContext.attachElement(portal ?? null);
-    // Attempt to play portal video with error handling
     tryPlayPortalVideo();
+    initPortalTimeline();
   });
 
   onDestroy(() => {
     destroy?.();
     portalTimelineCleanup?.();
     sectionCleanup?.();
-    metadataUnsub();
     detachedUnsub();
-    metadataHomeUnsub();
     lensElementUnsub();
     lensHomeUnsub();
     lensDetachedUnsub();
@@ -253,63 +188,17 @@
     display: 'flex',
     flexDirection: 'column',
     justifyContent: 'center',
+    alignItems: 'center',
     px: { base: layout.safeX.base, md: layout.safeX.md, lg: layout.safeX.lg },
     py: { base: '2.5rem', md: '3rem' },
     backgroundColor: 'bg',
-    overflow: 'hidden',
-    opacity: 0,
-    visibility: 'hidden'
-  });
-
-  const band = css({
-    position: 'relative',
-    overflow: 'hidden',
-    backgroundColor: 'blackPearl',
-    borderRadius: '12px',
-    minHeight: { base: '35vh', md: '28vh' },
-    display: 'flex',
-    flexDirection: 'column',
-    justifyContent: 'center',
-    px: { base: '1rem', md: '2rem' }
-  });
-
-  const metadataDock = css({
-    width: '100%',
-    display: 'flex',
-    justifyContent: 'center'
-  });
-
-  const railClass = css({
-    display: 'flex',
-    gap: { base: '1.5rem', md: '2.5rem' },
-    py: '1rem',
-    whiteSpace: 'nowrap',
-    flexWrap: { base: 'wrap', md: 'nowrap' },
-    opacity: 0,
-    transition: 'opacity 0.3s ease'
-  });
-
-  const logoClass = css({
-    textTransform: 'uppercase',
-    letterSpacing: '0.14em',
-    fontSize: { base: '0.75rem', md: '0.85rem' }
-  });
-
-  const logoImgClass = css({
-    height: { base: '1.5rem', md: '2rem' },
-    width: 'auto',
-    objectFit: 'contain',
-    filter: 'brightness(0) invert(1)',
-    opacity: 0.85,
-    transition: 'opacity 0.2s ease',
-    _hover: {
-      opacity: 1
-    }
+    overflow: 'hidden'
+    // NOTE: Visibility controlled by GSAP autoAlpha via masterScrollController
   });
 
   const lensWrap = css({
     position: 'absolute',
-    top: '-18px',
+    top: '2rem',
     left: { base: '1rem', md: '1.5rem' }
   });
 
@@ -318,9 +207,8 @@
     width: '48px',
     height: '48px',
     borderRadius: '9999px',
-    borderWidth: '1px',
-    borderColor: 'accent',
-    backgroundColor: 'bg',
+    // Border removed - was causing stray yellow ring during animation
+    backgroundColor: 'transparent',
     pointerEvents: 'none',
     opacity: 0,
     zIndex: 10,
@@ -328,6 +216,7 @@
     overflow: 'hidden',
     transform: 'translate(-50%, -50%)'
   });
+
   const portalFrame = css({
     position: 'absolute',
     inset: '4%',
@@ -337,6 +226,7 @@
     opacity: 0,
     pointerEvents: 'none'
   });
+
   const portalHeading = css({
     position: 'absolute',
     left: '1.5rem',
@@ -351,33 +241,13 @@
 </script>
 
 <section class={section} bind:this={root} id="logos">
-  <FrameBorder variant="horizontal" tone="border" className={band}>
-    <div class={metadataDock} bind:this={metadataHost}></div>
-    <div class={lensWrap} bind:this={lensHost}></div>
+  {#if $debugMode}
+    <DebugOverlay label="logos" color={DEBUG_COLORS.logos.color} index={DEBUG_COLORS.logos.index} />
+  {/if}
+  <!-- Lens badge host (relocated from hero) -->
+  <div class={lensWrap} bind:this={lensHost}></div>
 
-    <div class={railClass} bind:this={rail}>
-      {#each clientLogos as logo}
-        {#if logo.isPortalTrigger}
-          <span class={cx(body({}), logoClass)} bind:this={netflixLogo}>
-            {#if logo.image}
-              <img src={logo.image} alt={logo.name} class={logoImgClass} />
-            {:else}
-              {logo.name}
-            {/if}
-          </span>
-        {:else}
-          <span class={cx(body({}), logoClass)}>
-            {#if logo.image}
-              <img src={logo.image} alt={logo.name} class={logoImgClass} />
-            {:else}
-              {logo.name}
-            {/if}
-          </span>
-        {/if}
-      {/each}
-    </div>
-  </FrameBorder>
-
+  <!-- Portal overlay for circular iris transition -->
   <div class={portalClass} bind:this={portal} aria-hidden="true">
     <span
       bind:this={portalLogoClone}

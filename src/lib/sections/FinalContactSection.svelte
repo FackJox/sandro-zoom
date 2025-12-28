@@ -7,6 +7,8 @@
   import { attachLensToSection } from '$lib/motion/lensTimeline';
   import { CameraRevealScene } from '$lib/components/camera';
   import { contactInfo } from '$lib/data/contact';
+  import DebugOverlay from '$lib/components/DebugOverlay.svelte';
+  import { debugMode, DEBUG_COLORS } from '$lib/stores/debug';
 
   // Camera transform state for idle animation and pointer parallax
   let cameraTransformOffset = $state({ x: 0, y: 0, rotateX: 0, rotateY: 0 });
@@ -261,6 +263,9 @@
 </script>
 
 <section bind:this={root} class={sectionClass} id="final-contact">
+  {#if $debugMode}
+    <DebugOverlay label="finalContact" color={DEBUG_COLORS.finalContact.color} index={DEBUG_COLORS.finalContact.index} />
+  {/if}
   <!-- 3D Camera Scene with LCD overlay (transforms for idle + parallax) -->
   <div class={sceneContainerClass} style={sceneContainerStyle}>
     <CameraRevealScene />

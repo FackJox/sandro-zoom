@@ -4,15 +4,17 @@
   import { heading, body } from '$styled-system/recipes';
   import SectionLabel from '$lib/components/SectionLabel.svelte';
   import StepIndicator from '$lib/components/StepIndicator.svelte';
+  import DebugOverlay from '$lib/components/DebugOverlay.svelte';
+  import { debugMode, DEBUG_COLORS } from '$lib/stores/debug';
   import { layout } from '$design/system';
   import { filmCards } from '$lib/data/film-cards';
   import { filmStories } from '$lib/data/film-stories';
   import { getVideoSources } from '$lib/utils/video';
   import { initBigFilmMotion } from '$lib/sections/BigFilmSection.motion';
   import { lensElement, lensAttachment } from '$lib/motion/lensTimeline';
-  import LensBarrelOverlay from './LensBarrelOverlay.svelte';
-  import ConcentricCircles from './ConcentricCircles.svelte';
-  import FilmToStoriesFocusOverlay from './FilmToStoriesFocusOverlay.svelte';
+  import LensBarrelOverlay from '$lib/components/LensBarrelOverlay.svelte';
+  import ConcentricCircles from '$lib/components/ConcentricCircles.svelte';
+  import FilmToStoriesFocusOverlay from '$lib/components/FilmToStoriesFocusOverlay.svelte';
   import {
     SCROLL_ORCHESTRATOR_CONTEXT_KEY,
     type ScrollOrchestrator,
@@ -407,6 +409,9 @@
 </script>
 
 <section bind:this={root} class={sectionClass} id="film">
+  {#if $debugMode}
+    <DebugOverlay label="bigFilm" color={DEBUG_COLORS.bigFilm.color} index={DEBUG_COLORS.bigFilm.index} />
+  {/if}
   <div bind:this={labelHost}>
     <SectionLabel prefix="Film" title="High Altitude Features" />
   </div>

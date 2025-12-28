@@ -24,11 +24,11 @@ export interface VisibilityRange {
 /**
  * Explicit visibility ranges for each section.
  *
- * Calculation notes:
- * - Transition start = section.start + section.duration * 0.85 (last 15%)
- * - End buffer = section.end + 15vh (smooth transition clearance)
+ * TIGHTENED RANGES (2024-12-26):
+ * Reduced overlap to eliminate blackout zones and section fighting.
+ * Only 2 sections visible at any time (current + transitioning).
  *
- * Section ranges from sectionConfig.ts:
+ * Section segments from sectionConfig.ts:
  * - hero:         0-240vh
  * - logos:        240-440vh
  * - bigFilm:      440-740vh
@@ -41,16 +41,16 @@ export interface VisibilityRange {
 export const SECTION_VISIBILITY: Record<SectionName, VisibilityRange> = {
   hero: {
     start: 0,
-    end: 440,  // Visible through entire Logos section (contracts during exit)
+    end: 280,  // Reduced: exit ~40vh into logos section (was 440)
     initialVisible: true
   },
   logos: {
-    start: 180,  // Hero at 75% (240 * 0.75) - metadata detach point
-    end: 450,    // 10vh buffer after logos ends (440 + 10)
+    start: 200,  // Reduced gap: Hero at ~83% (was 180 at 75%)
+    end: 460,    // 20vh buffer after logos ends (440 + 20)
     initialVisible: false
   },
   bigFilm: {
-    start: 410,  // Logos at 85% (240 + 200*0.85 = 410) - portal starts
+    start: 400,  // Tightened: visible only during portal expansion (was 200)
     end: 755,    // 15vh buffer after bigFilm ends (740 + 15)
     initialVisible: false
   },

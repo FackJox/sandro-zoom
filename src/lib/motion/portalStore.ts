@@ -69,91 +69,99 @@ export function createPortalContext(id = 'primary'): PortalContext {
         defaults: { ease: brandEase }
       });
 
-    const frameWidth = options.frameWidth ?? '92vw';
-    const frameHeight = options.frameHeight ?? '38.5vw';
+    // Calculate starting position from target rect (e.g., Netflix logo)
+    const getStartClipPath = () => {
+      const rect = options.getTargetRect();
+      console.log('[portalStore] getStartClipPath - rect:', rect);
+      if (!rect) return 'circle(0% at 50% 50%)';
+      const cx = (rect.left + rect.width / 2) / window.innerWidth * 100;
+      const cy = (rect.top + rect.height / 2) / window.innerHeight * 100;
+      const clipPath = `circle(0% at ${cx}% ${cy}%)`;
+      console.log('[portalStore] getStartClipPath - clipPath:', clipPath);
+      return clipPath;
+    };
 
-    // Framework 2 §3.2: Portal timeline with lens barrel UI
-    // - Circle iris appears over Netflix logo
-    // - Circle EXPANDS (zoom IN) to fill screen
-    // - Crossfade Netflix logo → 14 Peaks video INSIDE circle
-    // - Lens barrel UI appears during expansion
-    // - Circle edges "square off quickly" at the end
+    console.log('[portalStore] buildPortalTimeline - portal element:', portal);
+    console.log('[portalStore] buildPortalTimeline - initial clipPath:', getStartClipPath());
+
+    // Simplified portal animation using only circular clip-path
+    // Per Brand Physics: circular iris transitions, no rectangular frames
     timeline
-      .set(
-        portal,
-        {
-          opacity: 0,
-          width: 48,
-          height: 48,
-          borderRadius: '999px',
-          transform: 'translate(-50%, -50%)',
-          position: 'fixed',
-          pointerEvents: 'none',
-          zIndex: 10
-        },
-        0
-      )
-      .to(portal, { opacity: 1, duration: 0.2 }, 0)
-      // Expand portal circle
-      .to(
-        portal,
-        {
-          width: options.expandWidth ?? '85vw',
-          height: options.expandHeight ?? '85vw',
-          duration: 0.6
-        },
-        0.3
-      )
-      // Show lens barrel during expansion (Framework 2 §3.2)
-      .call(() => options.onLensBarrelVisibleChange?.(true), undefined, 0.35)
-      // Gradual squareoff during mid-expansion
-      .to(portal, { borderRadius: '32px', duration: 0.3 }, 0.55)
-      // Quick squareoff at the end - "edges square off quickly like iris opens → full sensor"
-      .to(
-        portal,
-        {
-          width: frameWidth,
-          height: frameHeight,
-          borderRadius: '8px',
-          duration: 0.25,
-          ease: 'power2.out'
-        },
-        0.85
-      )
-      // Hide lens barrel before final frame appears
-      .call(() => options.onLensBarrelVisibleChange?.(false), undefined, 0.9)
-      .call(() => options.onReveal?.(), undefined, '>-0.05')
-      .to(portal, { opacity: 0, duration: 0.4 }, '+=0.25');
+      .set(portal, {
+        clipPath: getStartClipPath(),
+        position: 'fixed',
+        inset: 0,
+        width: '100%',
+        height: '100%',
+        border: 'none',  // Remove yellow border during animation
+        backgroundColor: 'transparent',
+        pointerEvents: 'none',
+        zIndex: 10,
+        opacity: 0  // Start hidden until timeline plays
+      }, 0)
+      // Fade in at start of animation
+      .to(portal, { opacity: 1, duration: 0.15 }, 0)
+      // Expand circular iris from logo position to full viewport
+      .to(portal, {
+        clipPath: 'circle(100% at 50% 50%)',
+        duration: 0.8,
+        ease: brandEase,
+        onUpdate: function() {
+          if (this.progress() < 0.1 || this.progress() > 0.9) {
+            console.log('[portalStore] portal clipPath expanding, progress:', this.progress().toFixed(3));
+          }
+        }
+      }, 0)
+      // Show lens barrel during expansion
+      .call(() => {
+        console.log('[portalStore] 0.2: showing lens barrel');
+        options.onLensBarrelVisibleChange?.(true);
+      }, undefined, 0.2)
+      // Hide lens barrel near end
+      .call(() => {
+        console.log('[portalStore] 0.7: hiding lens barrel');
+        options.onLensBarrelVisibleChange?.(false);
+      }, undefined, 0.7)
+      // Reveal callback
+      .call(() => {
+        console.log('[portalStore] 0.75: onReveal callback');
+        options.onReveal?.();
+      }, undefined, 0.75)
+      // Fade out portal overlay (content now visible behind)
+      .to(portal, { opacity: 0, duration: 0.3 }, 0.85);
 
-    // Improved crossfade: Netflix logo and video overlap more (Framework 2 §3.2)
-    // "Inside the circle, we crossfade from Netflix logo → 14 Peaks still/video frame"
+    // Crossfade: Netflix logo → video inside the expanding circle
     if (options.textTarget) {
-      // Start fading logo earlier, longer duration for overlap
-      timeline.to(options.textTarget, { opacity: 0, duration: 0.35 }, 0.3);
+      timeline.to(options.textTarget, { opacity: 0, duration: 0.3 }, 0.1);
     }
 
     if (options.videoTarget) {
-      // Start video fade earlier to overlap with logo fade
-      timeline.set(options.videoTarget, { opacity: 0 }, 0.25);
-      timeline.to(options.videoTarget, { opacity: 1, duration: 0.45 }, 0.35);
+      timeline.set(options.videoTarget, { opacity: 0 }, 0);
+      timeline.to(options.videoTarget, { opacity: 1, duration: 0.4 }, 0.15);
     }
 
+    // Frame and heading elements (if needed for BigFilmSection)
     if (options.frameElement) {
-      timeline.set(options.frameElement, { opacity: 0, scale: 1.05 }, 0);
-      timeline.to(options.frameElement, { opacity: 1, scale: 1, duration: 0.35 }, 0.85);
+      timeline.set(options.frameElement, { opacity: 0, scale: 1.02 }, 0);
+      timeline.to(options.frameElement, { opacity: 1, scale: 1, duration: 0.3 }, 0.6);
     }
 
     if (options.headingElement) {
-      timeline.set(options.headingElement, { opacity: 0, yPercent: 40 }, 0);
-      timeline.to(
-        options.headingElement,
-        { opacity: 1, yPercent: 0, duration: 0.35 },
-        0.92
-      );
+      timeline.set(options.headingElement, { opacity: 0, yPercent: 20 }, 0);
+      timeline.to(options.headingElement, { opacity: 1, yPercent: 0, duration: 0.3 }, 0.7);
     }
 
     const updatePosition = () => {
-      positionOver(options.getTargetRect());
+      // Update clip-path center if position changes
+      const rect = options.getTargetRect();
+      if (rect && portal) {
+        const cx = (rect.left + rect.width / 2) / window.innerWidth * 100;
+        const cy = (rect.top + rect.height / 2) / window.innerHeight * 100;
+        // Only update if timeline hasn't started yet
+        if (timeline.progress() === 0) {
+          gsap.set(portal, { clipPath: `circle(0% at ${cx}% ${cy}%)` });
+        }
+      }
     };
 
     const cleanup = () => reset();

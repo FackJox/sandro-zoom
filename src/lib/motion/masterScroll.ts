@@ -192,9 +192,14 @@ function registerSection(
   // Set initial visibility state based on config
   // This prevents "flash of all content" on page load
   const visConfig = SECTION_VISIBILITY[name];
+  // Use specific z-index for hero, otherwise use current/inactive
+  const initialZIndex = visConfig.initialVisible
+    ? (name === 'hero' ? Z_INDEX_LAYERS.hero : Z_INDEX_LAYERS.current)
+    : Z_INDEX_LAYERS.inactive;
   gsap.set(element, {
     autoAlpha: visConfig.initialVisible ? 1 : 0,
-    zIndex: visConfig.initialVisible ? Z_INDEX_LAYERS.current : Z_INDEX_LAYERS.inactive
+    zIndex: initialZIndex,
+    pointerEvents: visConfig.initialVisible ? 'auto' : 'none'
   });
 
   console.debug('[master-scroll] registerSection', name, {
@@ -463,7 +468,12 @@ function applySectionVisibility(
     }
 
     // Use GSAP autoAlpha for proper visibility management
-    gsap.set(element, { autoAlpha: shouldBeVisible ? 1 : 0, zIndex });
+    // Also set pointerEvents to prevent hidden sections from capturing events
+    gsap.set(element, {
+      autoAlpha: shouldBeVisible ? 1 : 0,
+      zIndex,
+      pointerEvents: shouldBeVisible ? 'auto' : 'none'
+    });
 
     // DESIGN SPEC: Apply mask-image for zoom-out sections
     // Uses torus (donut) mask with inner radius shrinking faster than outer
@@ -536,6 +546,11 @@ function updateSections(globalProgress: number) {
   let activeSection: SectionName | null = null;
   let activeSectionProgress = 0;
 
+  // DEBUG: Log global progress every 10%
+  if (Math.floor(globalProgress * 10) !== Math.floor((globalProgress - 0.01) * 10)) {
+    console.log('[master-scroll] updateSections globalProgress:', globalProgress.toFixed(3), 'scrollVH:', scrollVH.toFixed(1));
+  }
+
   for (const name of Object.keys(SECTION_SEGMENTS) as SectionName[]) {
     const config = SECTION_SEGMENTS[name];
     const end = config.start + config.duration;
@@ -557,6 +572,11 @@ function updateSections(globalProgress: number) {
       isActive = true;
       activeSection = name;
       activeSectionProgress = localProgress;
+
+      // DEBUG: Log active section progress
+      if (name === 'hero' || name === 'logos' || name === 'bigFilm') {
+        console.log('[master-scroll] ACTIVE:', name, 'progress:', localProgress.toFixed(3));
+      }
     }
 
     notifySection(name, localProgress, isActive);

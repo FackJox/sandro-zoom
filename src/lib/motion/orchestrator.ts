@@ -1,5 +1,7 @@
 import type ScrollSmoother from 'gsap/ScrollSmoother';
 import { gsap, registerGsap, ScrollTrigger } from './gsapRegistry';
+import { createScrollLerp, type ScrollLerp } from './scroll-lerp';
+import { getScrollHeight } from './scroll-config';
 
 export const SCROLL_ORCHESTRATOR_CONTEXT_KEY = Symbol('scroll-orchestrator');
 
@@ -21,6 +23,7 @@ export type SectionTimelineHandle = {
 
 const timelineRegistry = new Map<string, SectionTimelineHandle>();
 let smootherInstance: ScrollSmoother | null = null;
+let scrollLerpInstance: ScrollLerp | null = null;
 let fallbackTickerCleanup: (() => void) | null = null;
 let shellIdCounter = 0;
 let activeShellId: number | null = null;
@@ -137,6 +140,11 @@ function cleanupScrollShellResources() {
     smootherInstance = null;
   }
 
+  if (scrollLerpInstance) {
+    scrollLerpInstance.reset();
+    scrollLerpInstance = null;
+  }
+
   if (fallbackTickerCleanup) {
     fallbackTickerCleanup();
     fallbackTickerCleanup = null;
@@ -181,10 +189,15 @@ export type ScrollOrchestrator = {
   getTimeline: typeof getTimeline;
   cleanupSectionTimeline: typeof cleanupSectionTimeline;
   getSmoother: () => ScrollSmoother | null;
+  getScrollLerp: () => ScrollLerp | null;
 };
 
 export function getSmoother() {
   return smootherInstance;
+}
+
+export function getScrollLerp(): ScrollLerp | null {
+  return scrollLerpInstance;
 }
 
 export function initScrollShell(
@@ -221,7 +234,7 @@ export function initScrollShell(
     };
   }
 
-  void loadScrollSmootherConstructor().then((ctor) => {
+  void loadScrollSmootherConstructor().then(async (ctor) => {
     if (activeShellId !== shellId) {
       return;
     }
@@ -239,6 +252,22 @@ export function initScrollShell(
         normalizeScroll: true,
         effects: true
       });
+
+      // Initialize scroll lerp for velocity smoothing
+      scrollLerpInstance = createScrollLerp();
+
+      // Log section timings in development
+      if (import.meta.env.DEV) {
+        const { logSectionTimings } = await import('./section-definitions');
+        logSectionTimings();
+
+        const { getDeviceType, getScrollHeight, getDeviceScrollMultiplier } = await import('./scroll-config');
+        console.debug('[motion] Scroll config:', {
+          deviceType: getDeviceType(),
+          scrollHeight: getScrollHeight(),
+          multiplier: getDeviceScrollMultiplier(),
+        });
+      }
     } catch (error) {
       console.warn('[motion] ScrollSmoother initialization failed, using ticker fallback', error);
       smootherInstance = null;
@@ -258,5 +287,6 @@ export const scrollOrchestrator: ScrollOrchestrator = {
   registerSectionTimeline,
   getTimeline,
   cleanupSectionTimeline,
-  getSmoother
+  getSmoother,
+  getScrollLerp
 };
